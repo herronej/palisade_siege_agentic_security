@@ -1,20 +1,28 @@
-# Release safety and artifact tiering
+# Release safety
 
-SIEGE is an attack corpus. Releasing it has to measure the defense without
-handing an attacker a turnkey evasive corpus, so the artifact is split into
-three tiers. This document states what is in each, and — for the claims that
-are checkable — how they are checked rather than asserted.
+SIEGE is an attack corpus. This document states what the release contains,
+what it deliberately does not, and — for the claims that are checkable — how
+they are checked rather than asserted.
 
-This supersedes the earlier `redteam_artifact_manifest.md`, which named five
-paths that never existed (`redteam/transforms/`, `redteam/oracles/
-effect_equivalence.py`, `redteam/chained.py`, `redteam/oscillation.py`,
-`policies/`). The tiering below names paths that are in this repository.
+This supersedes the earlier `redteam_artifact_manifest.md`, which proposed a
+gated tier and named five paths that never existed (`redteam/transforms/`,
+`redteam/oracles/effect_equivalence.py`, `redteam/chained.py`,
+`redteam/oscillation.py`, `policies/`).
 
 ---
 
-## Tier 1 — Public (this repository)
+## Everything is public
 
-The methodology, the mechanism, and the measurements.
+An earlier plan gated the adaptive machinery — the trained attack policies,
+the transform libraries and the reward-ranked evasive pools — on the argument
+that together they would constitute a turnkey evasive corpus. That plan was
+dropped, for a reason internal to the paper: its Section II-A argues that a
+defense evaluated only against fixed attacks measures nothing about its worst
+case. A reader cannot check that argument against our own system if the
+attacks that move it are held back, and the adaptive work the paper positions
+against released theirs. Gating would have bought little — the operators are
+paraphrase and encoding transforms, not novel capability — at the cost of
+making the paper's central claim unfalsifiable.
 
 | Artifact | Path |
 |---|---|
@@ -26,35 +34,24 @@ The methodology, the mechanism, and the measurements.
 | The 181-task benign control | `src/siege/corpus/benign_workload/`, `benign_diverse/` |
 | Per-class ground truth and adjudication | `src/siege/oracles/`, `src/siege/scorer.py` |
 | The replay harness and the nine-configuration ablation | `src/siege/eval/`, `src/siege/ablation_matrix.py` |
+| Trained attack policies | `src/siege/redteam/policy.py`, `attacker.py` |
+| Transform libraries (semantics-preserving evasion operators) | `src/siege/redteam/realizer.py`, `redteam/attacks/` |
+| Reward-ranked evasive pools (80 instances, 4 × 20) | `src/siege/corpus_generated/` |
+| The reward model that ranks them | `src/siege/redteam/reward.py`, `generator.py` |
+| The optimizing drivers (PAIR / TAP) | `src/siege/redteam/llm_optimizer.py`, `embedding_optimizer.py` |
 | All analysis modules behind reported numbers | `tools/` |
 | The facility `job_submit.lua` policy comparison | `tools/artifacts/job_submit.lua` |
 | The containerized single-node `slurmctld` | `docker/slurm/` |
 
-## Tier 2 — Gated to vetted partners
+**Consequence for reproduction.** Every result in the paper is executable from
+this repository, including the reward-ranked initialization of the adaptive
+drivers behind Section V-E, which no longer needs a weaker public substitute.
 
-The components that together would constitute a turnkey evasive corpus. These
-are **present in this repository today and must be removed before it is made
-public** — see the checklist at the end.
+The transform libraries also drive a search of the propagation closure — the
+experiment Section VI-A names as the one the evaluation most obviously calls
+for. They are released for that purpose. No such experiment is reported here.
 
-| Artifact | Path | Why gated |
-|---|---|---|
-| Trained attack policies (bandit state, learned proposal distributions) | `src/siege/redteam/policy.py`, `attacker.py` | Learned attack distributions |
-| Transform libraries — semantics-preserving evasion operators | `src/siege/redteam/realizer.py`, `redteam/attacks/llm/strategy_library.py`, `attacks/llm/intent_laundering.py`, `attacks/code/correctness_sabotage.py`, `attacks/embedding/` | The operators a propagation search would drive |
-| Reward-ranked evasive pools (80 instances, 4 classes × 20) | `src/siege/corpus_generated/` | Reward-ranked full-config evaders |
-| The reward model that ranks them | `src/siege/redteam/reward.py`, `generator.py` | Ranks evasions by success |
-| The optimizing drivers | `src/siege/redteam/llm_optimizer.py`, `embedding_optimizer.py` | PAIR/TAP search over the above |
-
-**What a reviewer loses without Tier 2.** Every result in the paper is
-executable from Tier 1 *except* the reward-ranked initialization of the
-adaptive drivers behind Section V-E, which reproduces from the public transform
-set at a lower starting point. The paper says this; it is true of this split.
-
-The transform libraries would also drive a search of the propagation closure —
-the experiment Section VI-A names as the one the evaluation most obviously
-calls for. They are released to vetted partners for that purpose. No such
-experiment is reported here.
-
-## Tier 3 — Not redistributable
+## Not redistributable
 
 | Artifact | Status |
 |---|---|
@@ -158,11 +155,9 @@ Keep the named version for camera-ready; the two differ only in those files.
 
 Work through this before the repository is made public.
 
-- [ ] **Remove Tier 2.** Excise the paths in the gated table above, and confirm
-      the remaining tree still imports and tests clean. The adaptive drivers'
-      *interfaces* stay public — only the trained state, the transform
-      operators and the ranked pools leave.
 - [ ] **Re-run the payload scan.** `uv run pytest tools/tests/test_release_safety.py`
+      — it now covers the generated pools and the adversary modules too, since
+      those are public.
 - [ ] **Confirm no credentials.** No `.env` is tracked; verify with
       `git log -p | grep -iE 'api[_-]?key|sk-[A-Za-z0-9]{20,}'` over the full
       history, not just the tip. This repository was created fresh rather than
@@ -173,9 +168,6 @@ Work through this before the repository is made public.
       in `NOTICE`.
 - [ ] **Mint the DOI**, tag the release, and update `CITATION.cff`. The state
       behind the reported numbers must be a tag, not a branch head.
-- [ ] **Set up the gated-access contact** on the artifact landing page, so the
-      Tier 2 request path in the paper resolves to something.
 - [ ] **Backport the payload scrub to VISTA.** The four fixes above exist only
       in this repository; the authoring source still carries the originals.
-- [ ] **Re-run the full suite** (`uv run pytest`) and confirm it is green after
-      Tier 2 removal, since some `tools/tests/` exercise the gated modules.
+- [ ] **Re-run the full suite** (`uv run pytest`) and confirm it is green.

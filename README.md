@@ -178,13 +178,16 @@ contain.
 
 Public attack payloads are **detection-pattern triggers with placeholder hosts,
 not working exploits**, and all dual-use content is surrogate-only. A separate
-tier — the trained attack policies, the transform libraries and the
-reward-ranked evasive pools, which together would constitute a turnkey evasive
-corpus — is gated to vetted partners.
+**Everything is public, the adaptive machinery included** — the trained attack
+policies, the transform libraries and the reward-ranked evasive pools. Gating
+them was considered and dropped: this paper argues that a defense evaluated
+only against fixed attacks measures nothing about its worst case, and that
+argument is not checkable against our own system with the attacks that move it
+held back.
 
 [`docs/palisade/RELEASE_SAFETY.md`](docs/palisade/RELEASE_SAFETY.md) states what
-sits in each tier, what is not redistributable, and how the claim above is
-verified rather than asserted.
+the release contains, what is not redistributable, and how the payload claim
+above is verified rather than asserted.
 
 ---
 

@@ -85,12 +85,19 @@ NOT_A_HOST = re.compile(
 
 
 def _public_corpus_files() -> list[Path]:
-    """Every file a public release would ship as corpus content."""
+    """Every file a public release would ship as corpus content.
+
+    This includes the reward-ranked generated pools and the adaptive
+    adversary's attack modules. They were once scoped for gated release; the
+    whole artifact is public, so they are held to the same bar as the
+    authored corpus rather than to a looser one.
+    """
     files: list[Path] = []
-    for root in (CORPUS_DIR, CONTROLS_DIR):
+    for root in (CORPUS_DIR, CONTROLS_DIR, SIEGE_DIR / "corpus_generated"):
         if root.is_dir():
             files += sorted(root.rglob("*.yaml"))
     files += sorted((SIEGE_DIR / "templates").glob("*.py"))
+    files += sorted((SIEGE_DIR / "redteam" / "attacks").rglob("*.py"))
     return files
 
 

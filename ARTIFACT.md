@@ -47,14 +47,18 @@ triggers with placeholder hosts rather than working exploits, and all dual-use
 content is surrogate-only — a claim checked by
 `tools/tests/test_release_safety.py`, not merely asserted.
 
-**Gated to vetted partners.** The trained attack policies, the transform
-libraries, and the reward-ranked evasive pools — the components that would
-constitute a turnkey evasive corpus. A reviewer can execute every result here
-without them *except* the reward-ranked initialization of the adaptive drivers
-behind Section V-E, which reproduces from the public transform set at a lower
-starting point. The transform libraries would also drive a search of the
-propagation closure; they are released for that purpose, and no such experiment
-is reported here.
+**Nothing is gated.** The adaptive machinery ships too — the trained attack
+policies, the transform libraries, and the reward-ranked evasive pools. Gating
+them was considered on the argument that together they constitute a turnkey
+evasive corpus, and dropped: Section II-A argues that a defense evaluated only
+against fixed attacks measures nothing about its worst case, and a reader
+cannot check that against our own system with the attacks that move it held
+back. **Every result here therefore reproduces**, including the reward-ranked
+initialization of the adaptive drivers behind Section V-E, which no longer
+needs a weaker public substitute. The transform libraries also drive a search
+of the propagation closure — the experiment Section VI-A names as the one this
+evaluation most obviously calls for; they are released for that purpose, and no
+such experiment is reported here.
 
 **Not redistributable.** MSTDB-TP is obtained under its own terms; we ship the
 ingestion manifest and content hashes, not the database.

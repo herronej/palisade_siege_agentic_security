@@ -49,8 +49,21 @@ Findings that fall inside the stated limitations above are expected, not
 vulnerabilities. A search that moves the propagation closure is the experiment
 we ask for; please report it as a result, and we will cite it.
 
-## Requesting the gated tier
+## Why the adaptive machinery is public
 
-Access to the trained attack policies, transform libraries and reward-ranked
-evasive pools is available to vetted partners. Requests go through the contact
-address on the artifact landing page and should state the intended use.
+The trained attack policies, transform libraries and reward-ranked evasive
+pools ship with everything else. Gating them was considered and dropped.
+
+The argument for gating was that together they constitute a turnkey evasive
+corpus. The argument against — which won — is that this project's own claim is
+that a defense evaluated only against fixed attacks measures nothing about its
+worst case. Withholding the attacks that move our numbers would make that claim
+unfalsifiable by anyone but us, against a defense we are asking people to
+trust. The operators are paraphrase and encoding transforms rather than novel
+capability, and the adaptive work we position against released theirs.
+
+What that decision does **not** cover: payloads remain detection-pattern
+triggers with placeholder hosts, dual-use content remains surrogate-only, and
+`tools/tests/test_release_safety.py` enforces the host half of that over every
+public instance — the generated pools and the adversary modules included — on
+every run.
