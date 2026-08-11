@@ -62,8 +62,18 @@ ingestion manifest and content hashes, not the database.
 Exact per-path tiering, and the pre-publication checklist, are in
 [`docs/palisade/RELEASE_SAFETY.md`](docs/palisade/RELEASE_SAFETY.md).
 
+**Anonymized review copy.**
+<https://anonymous.4open.science/status/palisade_siege_agentic_security-156F>
+
 **Archive.** `[DOI TO BE MINTED]`, tagged at `[TAG]`. The repository state
 behind the numbers reported here is the tagged commit, not a branch head.
+
+> **If that link is serving reviewers under double-blind, this repository is
+> not yet anonymous.** `anonymous.4open.science` anonymizes the hosting, not
+> the file contents. `CITATION.cff`, `NOTICE`, `LICENSE`, `README.md` and
+> `pyproject.toml` name the authors, their emails and UT-Battelle outright,
+> and every commit carries an author line. See
+> [`docs/palisade/RELEASE_SAFETY.md`](docs/palisade/RELEASE_SAFETY.md).
 
 ---
 

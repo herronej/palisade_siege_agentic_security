@@ -122,6 +122,38 @@ through framing.
 
 ---
 
+---
+
+## Anonymity, if this is served under double-blind
+
+The paper points reviewers at
+<https://anonymous.4open.science/status/palisade_siege_agentic_security-156F>.
+That service anonymizes the **hosting** — the URL, the owner, the forge — and
+serves the file contents unchanged. Everything below is currently visible to
+anyone who opens that link.
+
+| Where | What it reveals |
+|---|---|
+| `CITATION.cff` | All seven authors, ORNL affiliations, two @ornl.gov addresses |
+| `pyproject.toml` | Same author list and emails; `github.com/ORNL/...` URLs |
+| `NOTICE` | UT-Battelle, contract DE-AC05-00OR22725 |
+| `LICENSE` | UT-Battelle software-release process |
+| `README.md` | UT-Battelle acknowledgment |
+| Git history | Every commit's author line (`Emily Herron <herronej@ornl.gov>`) |
+
+Two further categories are *arguably* fine, because the paper itself states
+them and any facility-scale HPC paper carries the equivalent: `.olcf.ornl.gov`
+paths in the G5 policy, corpus and tests (17 files), and the served endpoint
+`api.i2-core.american-science-cloud.org`. Judge these against the venue's
+rules rather than assuming.
+
+**To anonymize**, the metadata files need author blocks replaced with a
+placeholder, and the history needs rewriting with a neutral author — a fresh
+`git init` is simplest, since this repository has no history worth preserving.
+Keep the named version for camera-ready; the two differ only in those files.
+
+---
+
 ## Pre-publication checklist
 
 Work through this before the repository is made public.

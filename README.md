@@ -19,9 +19,18 @@ compromises the information-flow model.
 This repository is the artifact for *Security Mediation and Adversarial
 Evaluation for Agentic AI in Scientific Workflows*.
 
+Anonymized review copy:
+<https://anonymous.4open.science/status/palisade_siege_agentic_security-156F>
+
 > **Release status.** This repository is not yet published. `LICENSE` is a
 > placeholder pending UT-Battelle software-release review, and the archival DOI
 > has not been minted. See [`NOTICE`](NOTICE) for the open items.
+>
+> **It is also not yet anonymous.** If the link above is serving reviewers
+> under double-blind, note that `anonymous.4open.science` anonymizes the
+> hosting, not the contents: this repository names its authors in
+> `CITATION.cff`, `NOTICE`, `pyproject.toml` and below, and in every commit's
+> author line. See [`docs/palisade/RELEASE_SAFETY.md`](docs/palisade/RELEASE_SAFETY.md).
 
 ---
 
