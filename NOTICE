@@ -1,0 +1,45 @@
+PALISADE and SIEGE
+Copyright (c) 2026, UT-Battelle, LLC. All rights reserved.
+
+This software was authored by UT-Battelle, LLC under Contract No.
+DE-AC05-00OR22725 with the U.S. Department of Energy (DOE).
+
+The U.S. Government retains and the publisher, by accepting the article for
+publication, acknowledges that the U.S. Government retains a nonexclusive,
+paid-up, irrevocable, worldwide license to publish or reproduce the published
+form of this manuscript, or allow others to do so, for U.S. Government
+purposes. DOE will provide public access to these results of federally
+sponsored research in accordance with the DOE Public Access Plan
+(https://www.energy.gov/doe-public-access-plan).
+
+--------------------------------------------------------------------------------
+OPEN ITEMS BEFORE RELEASE
+--------------------------------------------------------------------------------
+
+  [ ] LICENSE is a placeholder. See that file.
+  [ ] ORNL software disclosure / release number: __________ (fill in)
+  [ ] Archival DOI: __________ (mint at camera-ready; see CITATION.cff)
+  [ ] Release tag: __________ (the paper's numbers are a tag, not a branch head)
+
+--------------------------------------------------------------------------------
+THIRD-PARTY AND NON-REDISTRIBUTABLE COMPONENTS
+--------------------------------------------------------------------------------
+
+MSTDB-TP (Molten Salt Thermophysical Database) is NOT redistributed here and
+is not included in this repository. The reference-value contract round-trips
+cited numeric values against it, and obtaining it is subject to its own terms.
+This artifact ships the ingestion manifest and content hashes only. See
+docs/palisade/RELEASE_SAFETY.md.
+
+Bundled Semgrep rules under src/palisade/contracts/semgrep/ are authored for
+this project and are not derived from an upstream Semgrep registry ruleset, so
+the +semgrep configuration reproduces without network access.
+
+Slurm is not redistributed. docker/slurm/ builds a single-node controller from
+upstream images at Slurm 23.11.4.
+
+AgentDojo (Appendix D) is an optional dependency installed from PyPI at
+version 0.1.35 and is not vendored.
+
+Detector baselines (Prompt-Guard-86M, Prompt Guard 2) are downloaded from
+their upstream model hosts under their own licenses and are not vendored.

@@ -1,0 +1,232 @@
+{
+  "agenthpc_cancel_all_pending": {
+    "docstring": "Cancel every in-flight job submitted through this MCP session for\n``app_type``. Use when the user asks to stop / abort / cancel the\noptimization. Returns the list of cancelled job ids.\n\nDoes not touch completed trials in the results cache \u2014 those are kept so\nthe user can still see what was found before stopping.",
+    "optional_args": [],
+    "required_args": [
+      "app_type"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def agenthpc_cancel_all_pending(\n    ctx: Context,\n    app_type: str,\n) -> dict[str, Any]:\n    \"\"\"\n    Cancel every in-flight job submitted through this MCP session for\n    ``app_type``. Use when the user asks to stop / abort / cancel the\n    optimization. Returns the list of cancelled job ids.\n\n    Does not touch completed trials in the results cache \u2014 those are kept so\n    the user can still see what was found before stopping.\n    \"\"\"\n    app = _get_app(app_type)\n    pending = _session_pending(ctx.session_id, app_type)\n    if not pending:\n        return {\n            \"app_type\": app_type,\n            \"num_cancelled\": 0,\n            \"cancelled\": [],\n            \"message\": \"No in-flight jobs for this session.\",\n        }\n\n    ssh_conn = await get_ssh_conn_mcp_elicitation(\n        ctx,\n        message=get_tool_call_string(\n            \"agenthpc_cancel_all_pending\", app_type=app_type,\n        ),\n        host=app.host,\n    )\n    cancelled: list[dict[str, Any]] = []\n    # Snapshot keys so we can mutate the dict while iterating.\n    for job_id in list(pending.keys()):\n        info = pending.pop(job_id, None) or {}\n        output = await hpc_ops.scancel_job(ssh_conn, job_id)\n        cancelled.append({\n            \"job_id\": job_id,\n            \"parameters\": info.get(\"parameters\"),\n            \"trial_number\": info.get(\"trial_number\"),\n            \"scancel_output\": output.strip() or None,\n        })\n\n    await ctx.info(f\"agenthpc: cancelled {len(cancelled)} pending {app_type} jobs\")\n    return {\n        \"app_type\": app_type,\n        \"num_cancelled\": len(cancelled),\n        \"cancelled\": cancelled,\n    }"
+  },
+  "agenthpc_cancel_job": {
+    "docstring": "Cancel a single in-flight Slurm job submitted through this MCP session.\nIdempotent \u2014 cancelling a job that has already finished or been cancelled\nis a no-op. Drops the job from the pending-jobs registry.",
+    "optional_args": [],
+    "required_args": [
+      "app_type",
+      "job_id"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def agenthpc_cancel_job(\n    ctx: Context,\n    app_type: str,\n    job_id: str,\n) -> dict[str, Any]:\n    \"\"\"\n    Cancel a single in-flight Slurm job submitted through this MCP session.\n    Idempotent \u2014 cancelling a job that has already finished or been cancelled\n    is a no-op. Drops the job from the pending-jobs registry.\n    \"\"\"\n    app = _get_app(app_type)\n    ssh_conn = await get_ssh_conn_mcp_elicitation(\n        ctx,\n        message=get_tool_call_string(\n            \"agenthpc_cancel_job\", app_type=app_type, job_id=job_id,\n        ),\n        host=app.host,\n    )\n    output = await hpc_ops.scancel_job(ssh_conn, job_id)\n\n    pending = _session_pending(ctx.session_id, app_type)\n    removed = pending.pop(job_id, None)\n\n    await ctx.info(f\"agenthpc: cancelled {app_type} job {job_id}\")\n    return {\n        \"status\": \"cancelled\",\n        \"job_id\": job_id,\n        \"was_tracked\": removed is not None,\n        \"parameters\": removed[\"parameters\"] if removed else None,\n        \"scancel_output\": output.strip() or None,\n    }"
+  },
+  "agenthpc_check_job_status": {
+    "docstring": "Return the current state of a submitted job:\n\n- ``running`` \u2014 still in the scheduler queue.\n- ``completed`` \u2014 left the queue and the expected log file exists.\n- ``no_log`` \u2014 left the queue but the log file is missing (likely crashed).\n\nPass ``log_params`` exactly as returned by ``agenthpc_submit_parameter_set``.",
+    "optional_args": [],
+    "required_args": [
+      "app_type",
+      "job_id",
+      "log_params"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def agenthpc_check_job_status(\n    ctx: Context,\n    app_type: str,\n    job_id: str,\n    log_params: dict[str, Any],\n) -> dict[str, Any]:\n    \"\"\"\n    Return the current state of a submitted job:\n\n    - ``running`` \u2014 still in the scheduler queue.\n    - ``completed`` \u2014 left the queue and the expected log file exists.\n    - ``no_log`` \u2014 left the queue but the log file is missing (likely crashed).\n\n    Pass ``log_params`` exactly as returned by ``agenthpc_submit_parameter_set``.\n    \"\"\"\n    app = _get_app(app_type)\n    ssh_conn = await get_ssh_conn_mcp_elicitation(\n        ctx,\n        message=get_tool_call_string(\n            \"agenthpc_check_job_status\", app_type=app_type, job_id=job_id,\n        ),\n        host=app.host,\n    )\n    if await hpc_ops.job_in_queue(ssh_conn, job_id):\n        return {\"status\": \"running\", \"job_id\": job_id}\n\n    if await hpc_ops.log_exists(ssh_conn, _log_path(app, log_params)):\n        return {\"status\": \"completed\", \"job_id\": job_id}\n\n    return {\"status\": \"no_log\", \"job_id\": job_id}"
+  },
+  "agenthpc_get_all_results": {
+    "docstring": "Return every completed trial for ``app_type`` in the current MCP session,\nalong with the best score seen so far. Use this to avoid re-suggesting a\nparameter set that has already been evaluated, and as the stopping-criterion\ncheck at the top of each optimization-loop iteration.\n\nPass ``target_score`` and/or ``max_trials`` to override the YAML defaults.\n``threshold_reached`` and ``budget_exhausted`` in the response reflect the\neffective values so you can stop the loop when either is true.",
+    "optional_args": [
+      "max_trials",
+      "target_score"
+    ],
+    "required_args": [
+      "app_type"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def agenthpc_get_all_results(\n    ctx: Context,\n    app_type: str,\n    target_score: float | None = None,\n    max_trials: int | None = None,\n) -> dict[str, Any]:\n    \"\"\"\n    Return every completed trial for ``app_type`` in the current MCP session,\n    along with the best score seen so far. Use this to avoid re-suggesting a\n    parameter set that has already been evaluated, and as the stopping-criterion\n    check at the top of each optimization-loop iteration.\n\n    Pass ``target_score`` and/or ``max_trials`` to override the YAML defaults.\n    ``threshold_reached`` and ``budget_exhausted`` in the response reflect the\n    effective values so you can stop the loop when either is true.\n    \"\"\"\n    app = _get_app(app_type)\n    results = _session_results(ctx.session_id, app_type)\n    trials = [\n        {\"key\": k, \"parameters\": v[\"parameters\"], \"score\": v[\"score\"]}\n        for k, v in results.items()\n    ]\n    best_score = max((t[\"score\"] for t in trials), default=0.0)\n    best_trial = max(trials, key=lambda t: t[\"score\"]) if trials else None\n\n    threshold = _effective_threshold(app, target_score)\n    budget = _effective_max_trials(app, max_trials)\n\n    return {\n        \"app_type\": app_type,\n        \"num_trials\": len(trials),\n        \"max_trials\": budget,\n        \"score_threshold\": threshold,\n        \"best_score\": best_score,\n        \"best_parameters\": best_trial[\"parameters\"] if best_trial else None,\n        \"threshold_reached\": best_score >= threshold,\n        \"budget_exhausted\": len(trials) >= budget,\n        \"should_stop\": (best_score >= threshold) or (len(trials) >= budget),\n        \"trials\": trials,\n        \"defaults\": {\n            \"score_threshold\": app.score_threshold,\n            \"max_trials\": app.max_trials,\n        },\n    }"
+  },
+  "agenthpc_get_job_result": {
+    "docstring": "Read the completed job's log, extract metrics, compute the score, and cache\nit in the per-session results store. Pass ``parameters`` (the ones originally\nsubmitted) so the cache key matches what ``agenthpc_get_all_results`` reports.\nPass ``target_score`` to evaluate ``threshold_reached`` against the user's\ngoal instead of the YAML default.\n\nReturns ``{score, metrics, parameters, threshold_reached}``.",
+    "optional_args": [
+      "target_score"
+    ],
+    "required_args": [
+      "app_type",
+      "job_id",
+      "log_params",
+      "parameters"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def agenthpc_get_job_result(\n    ctx: Context,\n    app_type: str,\n    job_id: str,\n    log_params: dict[str, Any],\n    parameters: list[float],\n    target_score: float | None = None,\n) -> dict[str, Any]:\n    \"\"\"\n    Read the completed job's log, extract metrics, compute the score, and cache\n    it in the per-session results store. Pass ``parameters`` (the ones originally\n    submitted) so the cache key matches what ``agenthpc_get_all_results`` reports.\n    Pass ``target_score`` to evaluate ``threshold_reached`` against the user's\n    goal instead of the YAML default.\n\n    Returns ``{score, metrics, parameters, threshold_reached}``.\n    \"\"\"\n    app = _get_app(app_type)\n    ssh_conn = await get_ssh_conn_mcp_elicitation(\n        ctx,\n        message=get_tool_call_string(\n            \"agenthpc_get_job_result\", app_type=app_type, job_id=job_id,\n        ),\n        host=app.host,\n    )\n    log_path = _log_path(app, log_params)\n    pending = _session_pending(ctx.session_id, app_type)\n    if not await hpc_ops.log_exists(ssh_conn, log_path):\n        # Job is gone and no log was produced \u2014 drop it from the pending\n        # registry so a later \"cancel everything\" call does not try to\n        # scancel a dead job id.\n        pending.pop(job_id, None)\n        return {\n            \"status\": \"no_log\",\n            \"job_id\": job_id,\n            \"message\": f\"Log file {log_path} does not exist on {app.host}\",\n        }\n\n    contents = await hpc_ops.read_log(ssh_conn, log_path)\n    metrics = app.parse_log(contents)\n    score = app.calculate_score(metrics)\n\n    params = tuple(float(p) for p in parameters)\n    key = key_from_params(*params)\n    trial_number = log_params.get(\"trial_number\") if isinstance(log_params, dict) else None\n    results = _session_results(ctx.session_id, app_type)\n    # Stash the raw log contents and the trial number so agenthpc_plot_progress\n    # can build a cumulative specific-heat-curves plot without re-fetching\n    # stat0.dat over SSH for every call.\n    results[key] = {\n        \"parameters\": list(params),\n        \"score\": score,\n        \"trial_number\": int(trial_number) if trial_number is not None else None,\n        \"log_contents\": contents,\n    }\n    pending.pop(job_id, None)\n\n    threshold = _effective_threshold(app, target_score)\n    return {\n        \"status\": \"success\",\n        \"job_id\": job_id,\n        \"parameters\": list(params),\n        \"score\": score,\n        \"metrics\": list(metrics) if metrics else None,\n        \"score_threshold\": threshold,\n        \"threshold_reached\": score >= threshold,\n    }"
+  },
+  "agenthpc_get_search_space": {
+    "docstring": "Describe the search space, objective, score threshold, and trial budget\nfor ``app_type``. Pure \u2014 does not touch HPC.\n\nPass ``target_score`` and/or ``max_trials`` to override the YAML defaults\n(e.g. with values the user requested at the start of the optimization).\nThe returned ``score_threshold`` and ``max_trials`` fields will reflect\nthe effective values so you can use them as stopping criteria.",
+    "optional_args": [
+      "max_trials",
+      "target_score"
+    ],
+    "required_args": [
+      "app_type"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def agenthpc_get_search_space(\n    app_type: str,\n    target_score: float | None = None,\n    max_trials: int | None = None,\n) -> dict[str, Any]:\n    \"\"\"\n    Describe the search space, objective, score threshold, and trial budget\n    for ``app_type``. Pure \u2014 does not touch HPC.\n\n    Pass ``target_score`` and/or ``max_trials`` to override the YAML defaults\n    (e.g. with values the user requested at the start of the optimization).\n    The returned ``score_threshold`` and ``max_trials`` fields will reflect\n    the effective values so you can use them as stopping criteria.\n    \"\"\"\n    app = _get_app(app_type)\n    info = app.get_search_space_info()\n    info[\"score_threshold\"] = _effective_threshold(app, target_score)\n    info[\"max_trials\"] = _effective_max_trials(app, max_trials)\n    info[\"defaults\"] = {\n        \"score_threshold\": app.score_threshold,\n        \"max_trials\": app.max_trials,\n    }\n    return info"
+  },
+  "agenthpc_list_applications": {
+    "docstring": "List every application available for agentic HPC optimization.",
+    "optional_args": [],
+    "required_args": [],
+    "server": "vista_mcp_server",
+    "source": "async def agenthpc_list_applications() -> dict[str, Any]:\n    \"\"\"List every application available for agentic HPC optimization.\"\"\"\n    return {\"applications\": available_apps()}"
+  },
+  "agenthpc_list_pending_jobs": {
+    "docstring": "Return the Slurm job ids this MCP session has submitted for ``app_type``\nthat have not yet produced a score. Use this before cancelling so you\ncan tell the user which jobs are about to go away.",
+    "optional_args": [],
+    "required_args": [
+      "app_type"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def agenthpc_list_pending_jobs(\n    ctx: Context,\n    app_type: str,\n) -> dict[str, Any]:\n    \"\"\"\n    Return the Slurm job ids this MCP session has submitted for ``app_type``\n    that have not yet produced a score. Use this before cancelling so you\n    can tell the user which jobs are about to go away.\n    \"\"\"\n    pending = _session_pending(ctx.session_id, app_type)\n    return {\n        \"app_type\": app_type,\n        \"num_pending\": len(pending),\n        \"jobs\": [\n            {\n                \"job_id\": job_id,\n                \"parameters\": info[\"parameters\"],\n                \"trial_number\": info.get(\"trial_number\"),\n            }\n            for job_id, info in pending.items()\n        ],\n    }"
+  },
+  "agenthpc_plot_progress": {
+    "docstring": "Render specific-heat-vs-temperature curves for every completed trial in\nthis MCP session on a single figure, labelled by trial number, and save\nthe PNG to the output panel. Call this after each successful\n``agenthpc_get_job_result`` so the user can watch the campaign evolve.\n\nUses the ``stat0.dat`` contents cached by ``agenthpc_get_job_result`` \u2014\ndoes not re-open the SSH connection. If no trials have completed yet,\nreturns a short message instead of a plot.",
+    "optional_args": [],
+    "required_args": [
+      "app_type"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def agenthpc_plot_progress(\n    ctx: Context,\n    app_type: str,\n) -> str:\n    \"\"\"\n    Render specific-heat-vs-temperature curves for every completed trial in\n    this MCP session on a single figure, labelled by trial number, and save\n    the PNG to the output panel. Call this after each successful\n    ``agenthpc_get_job_result`` so the user can watch the campaign evolve.\n\n    Uses the ``stat0.dat`` contents cached by ``agenthpc_get_job_result`` \u2014\n    does not re-open the SSH connection. If no trials have completed yet,\n    returns a short message instead of a plot.\n    \"\"\"\n    results = _session_results(ctx.session_id, app_type)\n    if not results:\n        return \"No completed trials yet \u2014 nothing to plot.\"\n\n    # Matplotlib must be imported lazily and with Agg because this process is\n    # a long-running MCP server, not a one-shot sandbox job.\n    import matplotlib\n    matplotlib.use(\"Agg\")\n    import matplotlib.pyplot as plt\n\n    # Order trials by trial_number so colors follow the campaign timeline.\n    trials = sorted(\n        (r for r in results.values() if r.get(\"log_contents\")),\n        key=lambda r: (r.get(\"trial_number\") is None, r.get(\"trial_number\") or 0),\n    )\n    if not trials:\n        return \"No completed trials have cached log contents \u2014 nothing to plot.\"\n\n    n = len(trials)\n    # viridis reads monotonically \u2014 aligns with \"later trial = different shade\",\n    # making temporal progression visible at a glance.\n    cmap = matplotlib.colormaps[\"viridis\"].resampled(max(n, 2))\n\n    fig, ax = plt.subplots(figsize=(8.2, 5.0), dpi=140)\n    skipped: list[int] = []\n    plotted = 0\n    best_score = -float(\"inf\")\n    best_label = None\n\n    for i, trial in enumerate(trials):\n        temps, cvs = _parse_stat0(trial[\"log_contents\"])\n        if not temps:\n            skipped.append(trial.get(\"trial_number\") or -1)\n            continue\n        params = trial.get(\"parameters\", [])\n        tn = trial.get(\"trial_number\")\n        # Compact legend entry: trial tag + composition + Tc (score).\n        comp = \", \".join(f\"{p:.2f}\" for p in params) if params else \"\"\n        score = trial.get(\"score\", 0.0)\n        label = f\"Trial {tn if tn is not None else i+1}: ({comp}) \u2192 Tc={score:.1f}\"\n        ax.plot(temps, cvs, color=cmap(i), linewidth=1.5, label=label)\n        plotted += 1\n        if score > best_score:\n            best_score = score\n            best_label = label\n\n    ax.set_xlabel(\"Temperature (K)\", fontsize=11)\n    ax.set_ylabel(\"Specific heat  C$_v$\", fontsize=11)\n    ax.set_title(\n        f\"MoNbTaW progress \u2014 {plotted} trial{'s' if plotted != 1 else ''}\"\n        + (f\" \u00b7 best Tc = {best_score:.1f} K\" if best_label else \"\"),\n        fontsize=12, pad=12,\n    )\n    ax.grid(True, alpha=0.25, linestyle=\"--\", linewidth=0.6)\n    # Legend outside the plot area when there are many curves.\n    legend_kwargs = {\"fontsize\": 8, \"frameon\": False}\n    if plotted > 6:\n        ax.legend(loc=\"center left\", bbox_to_anchor=(1.02, 0.5), **legend_kwargs)\n        fig.subplots_adjust(right=0.68)\n    else:\n        ax.legend(loc=\"best\", **legend_kwargs)\n\n    host_dir: Path = Path(get_vista_meta(ctx).project_paths.require_output_dir()) / \"alloy-progress\"\n    host_dir.mkdir(parents=True, exist_ok=True)\n    filename = f\"{app_type}_progress.png\"\n    host_path = host_dir / filename\n    fig.savefig(host_path, bbox_inches=\"tight\")\n    plt.close(fig)\n\n    sandbox_path = f\"{_PLOT_SANDBOX_DIR}/{filename}\"\n    lines = [\n        f\"Plotted {plotted} trial{'s' if plotted != 1 else ''} for {app_type}.\",\n    ]\n    if best_label:\n        lines.append(f\"Best so far: {best_label}\")\n    if skipped:\n        lines.append(f\"Skipped trials (no parseable stat0.dat): {skipped}\")\n    # The chat route matches /Plot saved to\\s+(\\/\\S+\\.(?:png|jpg|jpeg|svg|gif))/\n    # to auto-display the figure \u2014 keep this line verbatim.\n    lines.append(f\"Plot saved to {sandbox_path}\")\n    await ctx.info(f\"agenthpc: rendered progress plot \u2192 {host_path} (plotted={plotted})\")\n    return \"\\n\".join(lines)"
+  },
+  "agenthpc_submit_parameter_set": {
+    "docstring": "Submit one parameter set to the HPC cluster for evaluation.\n\nFor MoNbTaW, ``parameters`` is ``[Mo, Nb, Ta, W]`` \u2014 the four atom-fraction\npercentages. They MUST sum to exactly 1.0 (tolerance 1e-3); any other sum\nis rejected with an error before anything is submitted to HPC.\n``trial_number`` controls the remote run directory name; if omitted, the\nserver uses the count of already-submitted trials in this session.\n\nReturns ``{job_id, parameters, log_params, cached?}``. Pass ``job_id`` and\n``log_params`` back to the status/result tools. If the exact parameter set\nhas already been evaluated in this session, returns ``{\"cached\": true,\n\"score\": ...}`` instead of submitting a new job.",
+    "optional_args": [
+      "trial_number"
+    ],
+    "required_args": [
+      "app_type",
+      "parameters"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def agenthpc_submit_parameter_set(\n    ctx: Context,\n    app_type: str,\n    parameters: list[float],\n    trial_number: int | None = None,\n) -> dict[str, Any]:\n    \"\"\"\n    Submit one parameter set to the HPC cluster for evaluation.\n\n    For MoNbTaW, ``parameters`` is ``[Mo, Nb, Ta, W]`` \u2014 the four atom-fraction\n    percentages. They MUST sum to exactly 1.0 (tolerance 1e-3); any other sum\n    is rejected with an error before anything is submitted to HPC.\n    ``trial_number`` controls the remote run directory name; if omitted, the\n    server uses the count of already-submitted trials in this session.\n\n    Returns ``{job_id, parameters, log_params, cached?}``. Pass ``job_id`` and\n    ``log_params`` back to the status/result tools. If the exact parameter set\n    has already been evaluated in this session, returns ``{\"cached\": true,\n    \"score\": ...}`` instead of submitting a new job.\n    \"\"\"\n    app = _get_app(app_type)\n\n    if app_type == \"monbtaw\":\n        if len(parameters) != 4:\n            raise ValueError(f\"MoNbTaW expects 4 parameters, got {len(parameters)}\")\n        params = tuple(float(p) for p in parameters)\n        total = sum(params)\n        # MoNbTaW parameters are atom-fraction percentages \u2014 they MUST sum to\n        # 1.0 or the underlying simulation input is physically meaningless.\n        # Reject malformed proposals server-side with a precise error so the\n        # LLM can self-correct on the next turn.\n        if abs(total - 1.0) > 1e-3:\n            raise ValueError(\n                f\"MoNbTaW composition must sum to 1.0; got \"\n                f\"[Mo={params[0]}, Nb={params[1]}, Ta={params[2]}, W={params[3]}] \"\n                f\"which sums to {total:.6f} (off by {total - 1.0:+.6f}). \"\n                f\"Rescale so the four fractions add up to exactly 1.0 and retry.\"\n            )\n        key = key_from_params(*params)\n    else:\n        raise ValueError(f\"Unsupported application: {app_type}\")\n\n    results = _session_results(ctx.session_id, app_type)\n    if key in results:\n        cached = results[key]\n        await ctx.info(f\"agenthpc: returning cached score for {app_type} {key}\")\n        return {\n            \"cached\": True,\n            \"app_type\": app_type,\n            \"parameters\": cached[\"parameters\"],\n            \"score\": cached[\"score\"],\n        }\n\n    if trial_number is None:\n        # Count both completed and in-flight submissions in this session.\n        trial_number = sum(1 for _ in results)  # completed so far; collisions\n        # are tolerated since trial_number only names the remote run dir.\n\n    ssh_conn = await get_ssh_conn_mcp_elicitation(\n        ctx,\n        message=get_tool_call_string(\n            \"agenthpc_submit_parameter_set\",\n            app_type=app_type,\n            parameters=list(params),\n            trial_number=trial_number,\n        ),\n        host=app.host,\n    )\n    if app_type == \"monbtaw\":\n        job_id = await hpc_ops.submit_monbtaw(ssh_conn, app.app_config, params, trial_number)\n        log_params = {\"trial_number\": trial_number}\n    else:\n        raise ValueError(f\"Unsupported application: {app_type}\")\n\n    pending = _session_pending(ctx.session_id, app_type)\n    pending[job_id] = {\n        \"parameters\": list(params),\n        \"trial_number\": trial_number,\n        \"log_params\": log_params,\n    }\n\n    await ctx.info(f\"agenthpc: submitted {app_type} job {job_id} for params {params}\")\n    return {\n        \"cached\": False,\n        \"app_type\": app_type,\n        \"job_id\": job_id,\n        \"parameters\": list(params),\n        \"log_params\": log_params,\n    }"
+  },
+  "agenthpc_wait_for_job": {
+    "docstring": "Block on the server until the given job leaves ``completed`` or ``no_log`` state,\nor ``timeout_s`` elapses. Returns the same shape as ``agenthpc_check_job_status``,\nwith an extra ``timed_out`` field when the timeout is reached.\n\nUse this instead of calling ``agenthpc_check_job_status`` in a loop \u2014 it avoids\nburning LLM tokens on repeated polling.",
+    "optional_args": [
+      "poll_interval_s",
+      "timeout_s"
+    ],
+    "required_args": [
+      "app_type",
+      "job_id",
+      "log_params"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def agenthpc_wait_for_job(\n    ctx: Context,\n    app_type: str,\n    job_id: str,\n    log_params: dict[str, Any],\n    timeout_s: int = 1800,\n    poll_interval_s: int = 30,\n) -> dict[str, Any]:\n    \"\"\"\n    Block on the server until the given job leaves ``completed`` or ``no_log`` state,\n    or ``timeout_s`` elapses. Returns the same shape as ``agenthpc_check_job_status``,\n    with an extra ``timed_out`` field when the timeout is reached.\n\n    Use this instead of calling ``agenthpc_check_job_status`` in a loop \u2014 it avoids\n    burning LLM tokens on repeated polling.\n    \"\"\"\n    app = _get_app(app_type)\n    ssh_conn = await get_ssh_conn_mcp_elicitation(\n        ctx,\n        message=get_tool_call_string(\n            \"agenthpc_wait_for_job\",\n            app_type=app_type,\n            job_id=job_id,\n            timeout_s=timeout_s,\n        ),\n        host=app.host,\n    )\n    log_path = _log_path(app, log_params)\n    deadline = asyncio.get_event_loop().time() + max(1, timeout_s)\n    while True:\n        if not await hpc_ops.job_in_queue(ssh_conn, job_id):\n            if await hpc_ops.log_exists(ssh_conn, log_path):\n                return {\"status\": \"completed\", \"job_id\": job_id}\n            return {\"status\": \"no_log\", \"job_id\": job_id}\n\n        now = asyncio.get_event_loop().time()\n        if now >= deadline:\n            return {\"status\": \"running\", \"job_id\": job_id, \"timed_out\": True}\n\n        await asyncio.sleep(min(poll_interval_s, deadline - now))"
+  },
+  "cancel_hpc_job": {
+    "docstring": "Cancel a queued or running HPC job.\n\nArgs:\n    job_id: The job id returned by submit_hpc_job.\n    cluster: Which cluster the job was submitted to. If omitted, looked up from\n        the in-session cache.\n\nReturns:\n    Confirmation of the cancellation request.",
+    "optional_args": [
+      "cluster"
+    ],
+    "required_args": [
+      "job_id"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def cancel_hpc_job(ctx: Context, job_id: str, cluster: Cluster | None = None) -> str:\n    \"\"\"\n    Cancel a queued or running HPC job.\n\n    Args:\n        job_id: The job id returned by submit_hpc_job.\n        cluster: Which cluster the job was submitted to. If omitted, looked up from\n            the in-session cache.\n\n    Returns:\n        Confirmation of the cancellation request.\n    \"\"\"\n    job_id = validate_job_id(job_id)\n    cfg = get_vista_meta(ctx).user\n    cluster = _resolve_cluster(cluster, cfg, job_id)\n    if cluster == \"odo\":\n        # S3M doesn't expose cancel directly; scancel over the existing SSH session works.\n        s3m_client = get_s3m_client(s3m_token=cfg.require_s3m_token())\n        await s3m_client.bash(f\"scancel {shlex.quote(job_id)}\")\n    else:\n        iri_client = await create_iri_client(iri_token=cfg.require_nersc_iri_token())\n        await iri_client.cancel_job(job_id)\n    logging.info(f\"Cancelled job {job_id} on {cluster}\")\n    return f\"Cancellation requested for job {job_id} on {cluster}.\""
+  },
+  "create_file": {
+    "docstring": "Create a new file.",
+    "optional_args": [],
+    "required_args": [
+      "content",
+      "path"
+    ],
+    "server": "dev_mcp_server",
+    "source": "async def create_file(\n    path: A[str, \"Path to the file\"],\n    content: A[str, \"Content to write\"],\n):\n    \"\"\"\n    Create a new file.\n    \"\"\"\n    proc = await sandbox.exec(\"tee\", args = [path])\n    await proc.communicate(content.encode())\n    return f\"Successfully created {path}\""
+  },
+  "display_file": {
+    "docstring": "Display an image file to the user. Reads the file, base64-encodes it,\nand returns an HTML <img> tag that the UI renders directly.",
+    "optional_args": [],
+    "required_args": [
+      "uri"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def display_file(\n    ctx: Context,\n    uri: A[str, \"Absolute path to an image file, or a file:// URI\"],\n) -> str:\n    \"\"\"\n    Display an image file to the user. Reads the file, base64-encodes it,\n    and returns an HTML <img> tag that the UI renders directly.\n    \"\"\"\n    try:\n        # Currently only file uris are allowed. We may adjust that if we switch back to using MCP Apps for more advanced rendering\n        uri_map = _build_uri_map(get_vista_meta(ctx).project_paths)\n        resolved = Path.from_uri(resolve_uri(uri, settings.allowed_uris, uri_map))\n    except ValueError as e:\n        msg = f\"Could not resolve {uri}: {e}\"\n        await ctx.warning(msg)\n        return msg\n\n    if not resolved.exists():\n        msg = f\"File not found: {resolved}\"\n        await ctx.warning(msg)\n        return msg\n\n    ext = resolved.suffix.lower()\n    if ext not in _IMAGE_EXTENSIONS:\n        # For non-image files, return the text content\n        try:\n            text = resolved.read_text(encoding=\"utf-8\", errors=\"replace\")\n            return text[:50_000]  # cap at 50k chars\n        except Exception as exc:\n            return f\"Cannot read file {resolved}: {exc}\"\n\n    # Read image and return as base64 HTML\n    mime_type = mimetypes.guess_type(str(resolved))[0] or \"application/octet-stream\"\n    try:\n        data = resolved.read_bytes()\n    except Exception as exc:\n        msg = f\"Cannot read image {resolved}: {exc}\"\n        await ctx.error(msg)\n        return msg\n\n    b64 = base64.b64encode(data).decode(\"ascii\")\n    html = (\n        f'<img src=\"data:{mime_type};base64,{b64}\" '\n        f'alt=\"{resolved.name}\" '\n        f'style=\"max-width:100%;height:auto;display:block;margin:0 auto;\" />'\n    )\n    await ctx.info(f\"display_file: returning {len(html)}-char HTML for {resolved.name}\")\n    return html"
+  },
+  "get_hpc_job_outputs": {
+    "docstring": "Download output files from an HPC job.\n\nArgs:\n    job_id: The job id returned by submit_hpc_job\n    files: List of file paths to download. Relative to the jobs output directory (as shown by get_hpc_job_status).\n    cluster: Which cluster the job was submitted to. If omitted, looked up from the\n        in-session cache.\n\nReturns:\n    The downloaded file paths.",
+    "optional_args": [
+      "cluster"
+    ],
+    "required_args": [
+      "files",
+      "job_id"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def get_hpc_job_outputs(\n    ctx: Context, job_id: str, files: list[str], cluster: Cluster | None = None,\n) -> str:\n    \"\"\"\n    Download output files from an HPC job.\n\n    Args:\n        job_id: The job id returned by submit_hpc_job\n        files: List of file paths to download. Relative to the jobs output directory (as shown by get_hpc_job_status).\n        cluster: Which cluster the job was submitted to. If omitted, looked up from the\n            in-session cache.\n\n    Returns:\n        The downloaded file paths.\n    \"\"\"\n    job_id = validate_job_id(job_id)\n    meta = get_vista_meta(ctx)\n    cfg = meta.user\n    host_output_dir = Path(meta.project_paths.require_output_dir())\n    cluster = _resolve_cluster(cluster, cfg, job_id)\n\n    if cluster == \"odo\":\n        return await _get_odo_job_outputs(cfg, host_output_dir, job_id, files)\n    return await _get_perlmutter_job_outputs(cfg, host_output_dir, job_id, files)"
+  },
+  "get_hpc_job_status": {
+    "docstring": "Get the status and logs of a submitted HPC job.\n\nArgs:\n    job_id: The job id returned by submit_hpc_job\n    cluster: Which cluster the job was submitted to. If omitted, looked up from the\n        in-session cache; falls back to the only-configured cluster.",
+    "optional_args": [
+      "cluster"
+    ],
+    "required_args": [
+      "job_id"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def get_hpc_job_status(ctx: Context, job_id: str, cluster: Cluster | None = None) -> str:\n    \"\"\"\n    Get the status and logs of a submitted HPC job.\n\n    Args:\n        job_id: The job id returned by submit_hpc_job\n        cluster: Which cluster the job was submitted to. If omitted, looked up from the\n            in-session cache; falls back to the only-configured cluster.\n    \"\"\"\n    job_id = validate_job_id(job_id)\n    cfg = get_vista_meta(ctx).user\n    cluster = _resolve_cluster(cluster, cfg, job_id)\n\n    if cluster == \"odo\":\n        return await _get_odo_job_status(cfg, job_id)\n    return await _get_perlmutter_job_status(cfg, job_id)"
+  },
+  "list_hpc_jobs": {
+    "docstring": "List recently submitted HPC jobs and their states.\n\nArgs:\n    cluster: Which cluster to list jobs for. If omitted, lists from the only-configured cluster.",
+    "optional_args": [
+      "cluster"
+    ],
+    "required_args": [],
+    "server": "vista_mcp_server",
+    "source": "async def list_hpc_jobs(ctx: Context, cluster: Cluster | None = None) -> str:\n    \"\"\"\n    List recently submitted HPC jobs and their states.\n\n    Args:\n        cluster: Which cluster to list jobs for. If omitted, lists from the only-configured cluster.\n    \"\"\"\n    cfg = get_vista_meta(ctx).user\n    cluster = _resolve_cluster(cluster, cfg)\n    if cluster == \"odo\":\n        return await _list_odo_jobs(cfg)\n    return _list_perlmutter_jobs()"
+  },
+  "rag_search": {
+    "docstring": "Search an indexed literature corpus (papers, reports, technical notes)\nfor passages relevant to the query, within a specific Knowledge Base.\n\nUse this tool for qualitative, conceptual, or literature-review\nquestions such as:\n  - \"What corrosion challenges exist for FLiBe in reactor piping?\"\n  - \"How is thermal conductivity of fluoride salts typically measured?\"\n  - \"What do recent studies say about tritium management in FHRs?\"\n\nDo NOT use this for quantitative lookups (melting points, viscosity\nvalues) \u2014 use run_bash with the structured JSON database for those.\n\nReturns passages with source filename, page number, and full citation\n(title, authors, journal, year, DOI) when available.\n\n## Hybrid retrieval\n\nWhen `hybrid=True`, the tool fuses BM25 lexical retrieval with\nthe existing vector retrieval (Semantic Chameleon arXiv\n2603.18034). The merged ranking demotes chunks that score\nonly on one modality, which is the signature of gradient-\nguided embedding-poisoning attacks (PoisonedRAG, AgentPoison).\nSee `hybrid_search.merge_retrievals` for the merge formula.\n\nHybrid retrieval requires a `bm25_corpus.json` next to the\nKB's ChromaDB store. `build_rag.py` writes this at indexing\ntime. When the file is missing for the queried KB, hybrid\ndegrades to vector-only with a log warning -- the caller's\n`hybrid=True` is preserved as intent but the returned\nresults are unchanged from the legacy path.",
+    "optional_args": [
+      "alpha",
+      "hybrid",
+      "kb_slug",
+      "n_results",
+      "vg_emit_embeddings"
+    ],
+    "required_args": [
+      "query"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def rag_search(\n    query: A[str, \"Natural-language search query\"],\n    kb_slug: A[\n        str | None,\n        \"Slug of the Knowledge Base to search. Use one of the slugs listed \"\n        \"in this project's system prompt. Optional when exactly one KB is \"\n        \"registered server-side.\",\n    ] = None,\n    n_results: A[int, \"Number of passages to return (1\u201320)\"] = 5,\n    hybrid: A[\n        bool,\n        \"When True, fuse BM25 lexical retrieval with vector retrieval \"\n        \"(Semantic Chameleon hybrid-search defense). Default False keeps \"\n        \"the legacy vector-only behavior byte-identical to pre-VISTAGuard \"\n        \"deployments. The VISTAGuard backend sets this transparently when \"\n        \"the G3 hybrid retrieval setting is enabled.\",\n    ] = False,\n    alpha: A[\n        float,\n        \"When `hybrid=True`, the weight on the vector modality (0.0 = \"\n        \"BM25 only, 1.0 = vector only, 0.5 = equal weight). Ignored \"\n        \"when `hybrid=False`. Default 0.5 matches the Semantic \"\n        \"Chameleon paper's reported configuration.\",\n    ] = 0.5,\n    vg_emit_embeddings: A[\n        bool,\n        \"VISTAGuard-internal: when True, append the retrieval batch's \"\n        \"embeddings as a delimited side-channel block for the G3 embedding-\"\n        \"anomaly detector. The backend sets and strips this transparently; \"\n        \"leave False.\",\n    ] = False,\n) -> str:\n    \"\"\"\n    Search an indexed literature corpus (papers, reports, technical notes)\n    for passages relevant to the query, within a specific Knowledge Base.\n\n    Use this tool for qualitative, conceptual, or literature-review\n    questions such as:\n      - \"What corrosion challenges exist for FLiBe in reactor piping?\"\n      - \"How is thermal conductivity of fluoride salts typically measured?\"\n      - \"What do recent studies say about tritium management in FHRs?\"\n\n    Do NOT use this for quantitative lookups (melting points, viscosity\n    values) \u2014 use run_bash with the structured JSON database for those.\n\n    Returns passages with source filename, page number, and full citation\n    (title, authors, journal, year, DOI) when available.\n\n    ## Hybrid retrieval\n\n    When `hybrid=True`, the tool fuses BM25 lexical retrieval with\n    the existing vector retrieval (Semantic Chameleon arXiv\n    2603.18034). The merged ranking demotes chunks that score\n    only on one modality, which is the signature of gradient-\n    guided embedding-poisoning attacks (PoisonedRAG, AgentPoison).\n    See `hybrid_search.merge_retrievals` for the merge formula.\n\n    Hybrid retrieval requires a `bm25_corpus.json` next to the\n    KB's ChromaDB store. `build_rag.py` writes this at indexing\n    time. When the file is missing for the queried KB, hybrid\n    degrades to vector-only with a log warning -- the caller's\n    `hybrid=True` is preserved as intent but the returned\n    results are unchanged from the legacy path.\n    \"\"\"\n    handle, err = _resolve_kb(kb_slug)\n    if err is not None or handle is None:\n        return err or \"ERROR: unable to resolve a Knowledge Base.\"\n\n    if handle.text_collection is None:\n        return (\n            f\"ERROR: Knowledge Base {handle.slug!r} has no text_chunks \"\n            f\"collection loaded ({handle.db_path}). The KB exists on disk \"\n            \"but its index may not have been built yet.\"\n        )\n\n    n_results = max(1, min(n_results, 20))\n\n    if hybrid:\n        formatted = _hybrid_retrieve(\n            handle, query, n_results, alpha,\n            emit_embeddings=vg_emit_embeddings,\n        )\n        if formatted is not None:\n            return formatted\n        # Fall through to vector-only on hybrid degradation. We\n        # log inside `_hybrid_retrieve` so the operator sees why.\n\n    query_embedding = _embed(query)\n    if vg_emit_embeddings:\n        raw = handle.text_collection.query(\n            query_embeddings=[query_embedding],\n            n_results=n_results,\n            include=[\"documents\", \"metadatas\", \"embeddings\"],\n        )\n    else:\n        raw = handle.text_collection.query(\n            query_embeddings=[query_embedding],\n            n_results=n_results,\n        )\n\n    if not raw[\"documents\"] or not raw[\"documents\"][0]:\n        return (\n            f\"No relevant passages found for the query in Knowledge Base \"\n            f\"{handle.slug!r}.\"\n        )\n\n    # Build response with citations\n    result = _format_results(\n        handle,\n        documents=raw[\"documents\"][0],\n        metadatas=raw[\"metadatas\"][0],\n    )\n    if vg_emit_embeddings and raw.get(\"embeddings\"):\n        result += _encode_embeddings_block(raw[\"embeddings\"][0])\n    return result"
+  },
+  "run_bash": {
+    "docstring": "Run a bash command inside the sandbox.\n\nThe sandbox has Python 3, numpy, matplotlib, and scipy.\nSkills are mounted at /mnt/skills/, output goes to /mnt/data/output/.\n\nKey paths:\n  Database JSON: /mnt/skills/salt-analysis/assets/Molten_Salt_Thermophysical_Properties.json\n  Analysis script: /mnt/skills/salt-analysis/scripts/analyze_salt.py\n  Phase diagram script: /mnt/skills/salt-analysis/scripts/plot_phase_diagram.py\n\nWhen a plot is saved, it is automatically displayed to the user.\nAlways set MPLBACKEND=Agg before running matplotlib.\nAvoid commands that produce a large amount of output \u2014 pipe to files instead.",
+    "optional_args": [],
+    "required_args": [
+      "command"
+    ],
+    "server": "dev_mcp_server",
+    "source": "async def run_bash(\n    command: A[str, \"Bash command to run\"],\n    ctx: Context,\n) -> str:\n    \"\"\"\n    Run a bash command inside the sandbox.\n\n    The sandbox has Python 3, numpy, matplotlib, and scipy.\n    Skills are mounted at /mnt/skills/, output goes to /mnt/data/output/.\n\n    Key paths:\n      Database JSON: /mnt/skills/salt-analysis/assets/Molten_Salt_Thermophysical_Properties.json\n      Analysis script: /mnt/skills/salt-analysis/scripts/analyze_salt.py\n      Phase diagram script: /mnt/skills/salt-analysis/scripts/plot_phase_diagram.py\n\n    When a plot is saved, it is automatically displayed to the user.\n    Always set MPLBACKEND=Agg before running matplotlib.\n    Avoid commands that produce a large amount of output \u2014 pipe to files instead.\n    \"\"\"\n    proc = await sandbox.exec(\"bash\", args=[\"-c\", command], combine_streams=True)\n    # `msb exec` forwards its stdin to the guest and won't exit until that pipe closes.\n    if proc.stdin and not proc.stdin.is_closing(): proc.stdin.close()\n    lines = []\n    while True:\n        line = (await proc.stdout.readline()).decode().replace(\"\\r\\n\", \"\\n\")\n        if not line: break\n        lines.append(line)\n        await ctx.info(line.rstrip(\"\\n\"))\n    await proc.wait()\n    return \"\".join(lines)"
+  },
+  "submit_hpc_job": {
+    "docstring": "",
+    "optional_args": [
+      "cluster",
+      "duration",
+      "node_count",
+      "script_args"
+    ],
+    "required_args": [
+      "job"
+    ],
+    "server": "vista_mcp_server",
+    "source": "async def submit_hpc_job(\n    ctx: Context,\n    job: str,\n    cluster: Cluster | None = None,\n    node_count: int | None = None,\n    duration: str | None = None,\n    script_args: str | None = None,\n) -> str:\n    if job not in AVAILABLE_JOBS:\n        raise ValueError(f\"{job} is not recognized, should be one of: {' '.join(AVAILABLE_JOBS)}\")\n    if node_count and (node_count > MAX_NODES or node_count <= 0):\n        raise ValueError(f\"node_count out of range (max {MAX_NODES})\")\n    duration_int = int(parse_time_limit(duration).total_seconds()) if duration else None\n    if duration_int and (duration_int > MAX_TIME or duration_int < 1):\n        raise ValueError(f\"Time limit too large (max: {MAX_TIME})\")\n\n    cfg = get_vista_meta(ctx).user\n    cluster = _resolve_cluster(cluster, cfg)\n    target = \"odo\" if cluster == \"odo\" else f\"{settings.nersc_machine} (NERSC)\"\n\n    # Job-submission approval is handled on the backend by VISTAGuard's G5\n    # HPC Job Gate via PydanticAI's deferred-tool-calls capability: the\n    # backend defers this call, shows the resolved SLURM script + G5\n    # policy-check results, and only invokes the tool after the user\n    # approves. The MCP server no longer prompts for confirmation itself.\n    if cluster == \"odo\":\n        job_id, eff_nodes, eff_duration = await _submit_odo_job(cfg, job, node_count, duration_int, script_args)\n        _submitted_jobs[job_id] = SubmittedJob(cluster=\"odo\")\n    else:\n        job_id, log_path, output_dir, eff_nodes, eff_duration = await _submit_perlmutter_job(\n            cfg, job, node_count, duration_int, script_args,\n        )\n        _submitted_jobs[job_id] = SubmittedJob(\n            cluster=\"perlmutter\", log_path=log_path, output_dir=output_dir,\n        )\n\n    # Return a ground-truth summary so the LLM doesn't have to guess at submitted values.\n    h, rem = divmod(eff_duration, 3600)\n    m, s = divmod(rem, 60)\n    return \"\\n\".join([\n        f\"job_id: {job_id}\",\n        f\"cluster: {cluster}\",\n        f\"nodes: {eff_nodes}\",\n        f\"duration: {h}:{m:02d}:{s:02d} ({eff_duration}s)\",\n    ])"
+  },
+  "view": {
+    "docstring": "View files and directories. For text files, displays numbered lines.\nHandles truncating large outputs.",
+    "optional_args": [
+      "range"
+    ],
+    "required_args": [
+      "path"
+    ],
+    "server": "dev_mcp_server",
+    "source": "async def view(\n    path: A[str, \"Path to the file or directory\"],\n    # Using tuple[int, int] creates a \"prefixItems\" schema that confuses openai.azure.com\n    range: A[list[int]|None,\n        \"Optional range to view for files. Format: [start_line, end_line]. lines are indexed at 1. Negative numbers index from end of file.\"\n    ] = None\n):\n    \"\"\"\n    View files and directories. For text files, displays numbered lines.\n    Handles truncating large outputs.\n    \"\"\"\n    if range is not None and len(range) != 2:\n        raise ValueError(\"range must be exactly [start, end]\")\n    return await view_path(sandbox, path, tuple(range) if range is not None else None)"
+  }
+}

@@ -1,0 +1,116 @@
+[project]
+name = "palisade-siege"
+version = "1.0.0"
+description = "PALISADE: a privileged security-mediation sidecar for agentic scientific platforms, and SIEGE, its adversarial benchmark."
+readme = "README.md"
+requires-python = "==3.14.3"
+# license: set at release time -- see LICENSE (placeholder) and NOTICE
+# license = { file = "LICENSE" }
+authors = [
+    { name = "Emily Herron", email = "herronej@ornl.gov" },
+    { name = "Josh Hutchins" },
+    { name = "Amir Sadovnik" },
+    { name = "Jesse Hines" },
+    { name = "Vanessa Lama" },
+    { name = "Junqi Yin" },
+    { name = "Feiyi Wang", email = "fwang2@ornl.gov" },
+]
+keywords = [
+    "agentic-ai",
+    "information-flow-control",
+    "prompt-injection",
+    "hpc",
+    "slurm",
+    "provenance",
+    "adversarial-benchmark",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering",
+]
+
+# Pinned, not floated. These are the versions the reported numbers were
+# produced against; `pydantic-ai>=1.90` in particular floats to a 2.x that
+# removes `MCPServerStreamableHTTP`, which G2's descriptor pinning depends on.
+# The lockfile is the authority; these pins keep a fresh resolve honest.
+dependencies = [
+    "pydantic-ai==1.90.0",
+    "pydantic-ai-shields==0.3.2",
+    "pydantic-settings==2.14.0",
+    "python-dotenv==1.2.2",
+    "pyyaml==6.0.3",
+    "anyio[trio]==4.13.0",
+    "openai==2.35.0",
+    "jsonschema==4.26.0",
+    "numpy==2.4.4",
+    # Clopper-Pearson / bootstrap intervals for every reported rate.
+    "scipy==1.17.1",
+]
+
+[project.optional-dependencies]
+# G4 static-analysis tier (+semgrep in the ablation). The ruleset is bundled
+# with the sidecar rather than pinned to an upstream registry, so this
+# reproduces without network access.
+palisade-g4 = ["semgrep==1.79.0"]
+
+# G3 corpus-integrity pinning against a served ChromaDB store, and the
+# embedding-space attack family (b3_2). Heavy; only these paths need it.
+retrieval = ["chromadb==1.5.9", "sentence-transformers==5.5.0"]
+
+# Provenance shipping to a Flowcept broker. Lazily imported: the sidecar
+# degrades to JSONL when the broker is unreachable or the extra is absent.
+flowcept = ["flowcept"]
+
+# The AgentDojo external-benchmark probe (Appendix D). Needs a served model.
+agentdojo = ["agentdojo==0.1.35"]
+
+# Figure generation for the ablation and budget-curve plots.
+figures = ["matplotlib==3.11.1"]
+
+# Detector baselines (Prompt-Guard-86M, Prompt Guard 2). Downloads weights.
+baselines = ["transformers>=4.44", "torch>=2.4"]
+
+dev = ["pytest==9.0.3"]
+
+# Everything needed to reproduce every offline result in the paper.
+repro = [
+    "palisade-siege[palisade-g4,figures,retrieval,dev]",
+]
+
+[project.scripts]
+siege-run = "siege.eval.__main__:main"
+palisade-pin-corpus = "palisade.pin_corpus:main"
+
+[project.urls]
+Homepage = "https://github.com/ORNL/palisade-siege"
+Repository = "https://github.com/ORNL/palisade-siege"
+Documentation = "https://github.com/ORNL/palisade-siege/blob/main/docs/palisade/README.md"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# `tools/` is deliberately NOT packaged: the analysis modules are run from a
+# checkout as `python -m tools.<module>`, which is how the paper cites them.
+packages = ["src/palisade", "src/siege"]
+artifacts = ["*.md", "*.yaml", "*.json", "*.lua"]
+
+[dependency-groups]
+dev = ["pytest==9.0.3"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/palisade", "src/siege", "tools"]
+# `tools` is a repo-root package, not an installed one -- the paper cites
+# the analysis modules as `tools.*` and they run from a checkout.
+pythonpath = ["."]
+# Reproduction runs are deterministic at seed 42; do not shuffle.
+addopts = "-p no:randomly"
+markers = [
+    "host_integration: requires the VISTA reference deployment (auto-skipped)",
+    "served_model: requires a served OpenAI-compatible endpoint",
+    "slurm: requires the containerized slurmctld under docker/slurm",
+]

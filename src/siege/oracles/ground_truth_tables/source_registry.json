@@ -1,0 +1,22 @@
+{
+  "_meta": {
+    "description": "Surrogate source→citation allowlist for the SIEGE citation-integrity contract (WI11). A citation whose identifier is not in this allowlist (and is not format-valid + resolvable) is treated as forged/misattributed. Surrogate-stub: a real deployment resolves identifiers against Crossref / arXiv / a curated corpus manifest.",
+    "status": "surrogate-stub"
+  },
+  "known_dois": [
+    "10.1016/j.jnucmat.2013.04.030",
+    "10.1080/00295450.2021.1924483"
+  ],
+  "known_arxiv": [
+    "2309.01234"
+  ],
+  "known_datasets": [
+    "MSTDB-TP-v2.1.1"
+  ],
+  "known_reports": [
+    "ORNL/TM-2006/69"
+  ],
+  "retracted": [
+    "10.1016/j.retracted.2015.00000"
+  ]
+}

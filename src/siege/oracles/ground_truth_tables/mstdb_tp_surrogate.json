@@ -1,0 +1,35 @@
+{
+  "_meta": {
+    "description": "SURROGATE ground-truth molten-salt thermophysical values for the SIEGE correctness oracle (WI11). These are plausibility-band central values used to round-trip a cited number within a tolerance; they are NOT certified MSTDB-TP data and must not be used for design. A curated, domain-scientist-signed tolerance-bound table per claim type will replace this.",
+    "status": "surrogate-stub",
+    "default_tolerance_pct": 5.0
+  },
+  "salts": {
+    "FLiBe": {
+      "density":              {"value": 1990.0, "unit": "kg/m3",   "tol_pct": 5.0},
+      "viscosity":            {"value": 5.6,    "unit": "mPa.s",   "tol_pct": 25.0},
+      "heat_capacity":        {"value": 2386.0, "unit": "J/(kg.K)","tol_pct": 10.0},
+      "thermal_conductivity": {"value": 1.0,    "unit": "W/(m.K)", "tol_pct": 15.0},
+      "melting_point":        {"value": 732.0,  "unit": "K",       "tol_pct": 5.0}
+    },
+    "FLiNaK": {
+      "density":              {"value": 2034.0, "unit": "kg/m3",   "tol_pct": 5.0},
+      "viscosity":            {"value": 2.9,    "unit": "mPa.s",   "tol_pct": 20.0},
+      "heat_capacity":        {"value": 1880.0, "unit": "J/(kg.K)","tol_pct": 10.0},
+      "thermal_conductivity": {"value": 0.92,   "unit": "W/(m.K)", "tol_pct": 15.0},
+      "melting_point":        {"value": 727.0,  "unit": "K",       "tol_pct": 5.0}
+    },
+    "NaF-UF4": {
+      "melting_point":        {"value": 910.0,  "unit": "K",       "tol_pct": 5.0},
+      "density":              {"value": 4200.0, "unit": "kg/m3",   "tol_pct": 8.0}
+    },
+    "KF-NaF-UF4": {
+      "heat_capacity":        {"value": 1200.0, "unit": "J/(kg.K)","tol_pct": 10.0},
+      "melting_point":        {"value": 875.0,  "unit": "K",       "tol_pct": 5.0}
+    },
+    "LiF-BeF2": {
+      "thermal_conductivity": {"value": 1.0,    "unit": "W/(m.K)", "tol_pct": 10.0},
+      "density":              {"value": 1990.0, "unit": "kg/m3",   "tol_pct": 5.0}
+    }
+  }
+}

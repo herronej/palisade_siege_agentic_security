@@ -1,0 +1,30 @@
+{
+  "_meta": {
+    "description": "Physical constants, absolute molten-salt property plausibility bounds, and unit-conversion factors for the SIEGE correctness oracle (WI11). Surrogate-stub; bounds are gross-error envelopes, not accuracy certifications.",
+    "status": "surrogate-stub"
+  },
+  "constants": {
+    "gas_constant_R":  {"value": 8.314,       "unit": "J/(mol.K)", "tol_pct": 1.0, "aliases": ["R", "gas_constant"]},
+    "boltzmann_k":     {"value": 1.380649e-23,"unit": "J/K",       "tol_pct": 1.0, "aliases": ["k_B", "kB", "boltzmann"]},
+    "avogadro":        {"value": 6.02214076e23,"unit": "1/mol",    "tol_pct": 1.0, "aliases": ["N_A", "NA", "avogadro_number"]},
+    "faraday":         {"value": 96485.0,     "unit": "C/mol",     "tol_pct": 1.0, "aliases": ["F"]}
+  },
+  "absolute_bounds": {
+    "density":              {"lo": 1500.0, "hi": 3500.0, "unit": "kg/m3"},
+    "viscosity":            {"lo": 0.1,    "hi": 200.0,  "unit": "mPa.s"},
+    "heat_capacity":        {"lo": 500.0,  "hi": 3000.0, "unit": "J/(kg.K)"},
+    "thermal_conductivity": {"lo": 0.1,    "hi": 10.0,   "unit": "W/(m.K)"},
+    "melting_point":        {"lo": 600.0,  "hi": 1600.0, "unit": "K"}
+  },
+  "unit_conversions": {
+    "temperature": {"C_to_K_offset": 273.15, "F_to_C": {"scale": 0.5555555555555556, "offset": -32.0}},
+    "energy":      {"eV_to_J": 1.602176634e-19, "cal_to_J": 4.184},
+    "pressure":    {"bar_to_Pa": 100000.0, "atm_to_Pa": 101325.0},
+    "temperature_trends": {
+      "viscosity": "decreases_with_T",
+      "density": "decreases_with_T",
+      "vapor_pressure": "increases_with_T",
+      "reaction_rate": "increases_with_T"
+    }
+  }
+}

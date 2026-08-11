@@ -1,0 +1,14 @@
+# SIEGE substrate -- the two active Phase-9 substrate containers
+# in one stack. Each is also runnable standalone from its own directory;
+# this top-level file `include:`s them so
+# `docker compose -f docker/siege/compose.yml up` boots both, and
+# `smoke_test.sh` validates each.
+#
+#   - siege-pypi-mirror  (pypiserver)   -> B4.3 typo-squat imports
+#   - siege-slurm-*      (SLURM cluster) -> B5.x HPC jobs
+#
+# The Redis cross-session memory container is deferred to CHUNKS and lives
+# under ../deferred/siege-memory/ (not part of the active stack).
+include:
+  - ../siege-pypi-mirror/compose.yml
+  - ../siege-slurm/compose.yml

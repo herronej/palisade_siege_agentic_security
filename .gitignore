@@ -1,0 +1,30 @@
+# Environments and secrets -- never commit these.
+.env
+.env.*
+!.env.sample
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# OS
+.DS_Store
+
+# Local run outputs. Generated reports under docs/palisade/ ARE committed --
+# they are the state behind the reported numbers at the release tag.
+/artifacts/
+/scratch/
+*.log
+
+# MSTDB-TP is obtained under its own terms and is never redistributed.
+# Only the ingestion manifest and content hashes ship.
+/data/
+/knowledge_bases/

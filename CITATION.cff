@@ -1,0 +1,82 @@
+cff-version: 1.2.0
+message: "If you use PALISADE or SIEGE, please cite the paper below."
+title: "PALISADE and SIEGE"
+abstract: >-
+  PALISADE is a privileged security-mediation sidecar for agentic scientific
+  platforms, gating six boundaries of a deployed agentic platform with
+  deterministic admission predicates over labels assigned outside the model.
+  SIEGE is its companion adversarial benchmark: 205 attack instances across
+  42 classes against a 181-task benign control, scoring an evaded inspection
+  tier separately from a value reaching a privileged sink with its label
+  stripped.
+type: software
+license: NOTICE  # TODO: replace with the SPDX identifier once settled
+version: "1.0.0"
+# TODO: mint the archival DOI at camera-ready and set it here and in
+# `preferred-citation`. The state behind the reported numbers is the release
+# tag, not a branch head.
+# doi: 10.5281/zenodo.XXXXXXX
+repository-code: "https://github.com/ORNL/palisade-siege"
+keywords:
+  - agentic AI
+  - information-flow control
+  - prompt injection
+  - HPC
+  - Slurm
+  - provenance
+  - adversarial benchmarking
+
+authors:
+  - family-names: Herron
+    given-names: Emily
+    affiliation: Oak Ridge National Laboratory
+    email: herronej@ornl.gov
+  - family-names: Hutchins
+    given-names: Josh
+    affiliation: Oak Ridge National Laboratory
+  - family-names: Sadovnik
+    given-names: Amir
+    affiliation: Oak Ridge National Laboratory
+  - family-names: Hines
+    given-names: Jesse
+    affiliation: Oak Ridge National Laboratory
+  - family-names: Lama
+    given-names: Vanessa
+    affiliation: Oak Ridge National Laboratory
+  - family-names: Yin
+    given-names: Junqi
+    affiliation: Oak Ridge National Laboratory
+  - family-names: Wang
+    given-names: Feiyi
+    affiliation: Oak Ridge National Laboratory
+    email: fwang2@ornl.gov
+
+preferred-citation:
+  type: conference-paper
+  title: >-
+    Security Mediation and Adversarial Evaluation for Agentic AI in
+    Scientific Workflows
+  year: 2026
+  authors:
+    - family-names: Herron
+      given-names: Emily
+      affiliation: Oak Ridge National Laboratory
+    - family-names: Hutchins
+      given-names: Josh
+      affiliation: Oak Ridge National Laboratory
+    - family-names: Sadovnik
+      given-names: Amir
+      affiliation: Oak Ridge National Laboratory
+    - family-names: Hines
+      given-names: Jesse
+      affiliation: Oak Ridge National Laboratory
+    - family-names: Lama
+      given-names: Vanessa
+      affiliation: Oak Ridge National Laboratory
+    - family-names: Yin
+      given-names: Junqi
+      affiliation: Oak Ridge National Laboratory
+    - family-names: Wang
+      given-names: Feiyi
+      affiliation: Oak Ridge National Laboratory
+  # TODO: fill in collection-title, DOI and pages at camera-ready.

@@ -1,0 +1,33 @@
+================================================================================
+  PLACEHOLDER -- NOT YET A LICENSE. DO NOT PUBLISH THIS REPOSITORY AS-IS.
+================================================================================
+
+This file is a scaffold. The license for PALISADE and SIEGE has not been
+settled, and this text grants no rights to anyone.
+
+WHAT HAS TO HAPPEN BEFORE RELEASE
+---------------------------------
+
+1. Choose the license. The paper's Artifact Description commits to "an
+   OSI-approved license" (Appendix F, Availability). The candidates discussed
+   were BSD-3-Clause (the most common default for ORNL research software),
+   MIT, and Apache-2.0.
+
+2. Clear it through UT-Battelle. This repository is work authored under
+   contract DE-AC05-00OR22725 with the U.S. Department of Energy. Software
+   release requires ORNL's software-release / IP review before publication,
+   and the approved license text must be pasted here verbatim -- not
+   paraphrased and not reconstructed from memory.
+
+3. Record the assigned software disclosure or release number in NOTICE.
+
+4. Replace this entire file with the approved text, then set the matching
+   SPDX identifier in pyproject.toml (`license = { text = "..." }` or a
+   `License ::` classifier, per the approved form).
+
+UNTIL THEN
+----------
+
+No permission is granted to use, copy, modify, or distribute this software.
+See NOTICE for the government-rights statement that accompanies whichever
+license is chosen; that statement is required regardless of which one it is.

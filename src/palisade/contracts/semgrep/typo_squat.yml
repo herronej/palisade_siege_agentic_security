@@ -1,0 +1,71 @@
+# PALISADE G4 -- typo-squatted dependency imports.
+#
+# A small, curated list of known typo-squatted PyPI package names
+# that have shipped malicious payloads. Sources include PyPI's own
+# security advisories and the public Snyk / Sonatype reports.
+# The list is *not* exhaustive; the goal is to catch the obvious
+# ones an LLM might emit when "import requests" is the intended
+# name. Operators should extend this list in `contracts_dir` as
+# new typo-squats surface in the wild.
+
+rules:
+  - id: vista-typo-squat-import
+    languages: [python]
+    severity: ERROR
+    message: |
+      The agent is importing a known typo-squatted PyPI package. This
+      package name is documented (PyPI / Snyk security advisories)
+      as having shipped credential-exfiltration or RCE payloads.
+      The correct package name is almost certainly the one without
+      the typo. See PALISADE G4 / attack taxonomy §4.6.
+    metadata:
+      vista-threat-surface: supply-chain
+      vista-taxonomy: "4.6"
+      vista-rule-version: 1
+      category: security
+      cwe: "CWE-1357: Reliance on Insufficiently Trustworthy Component"
+    pattern-either:
+      # PyPI-flagged credential stealers (intended -> typo)
+      - pattern: import urllib3_secure
+      - pattern: from urllib3_secure import $Y
+      - pattern: import urllib4
+      - pattern: from urllib4 import $Y
+      - pattern: import requests3
+      - pattern: from requests3 import $Y
+      - pattern: import requestes
+      - pattern: from requestes import $Y
+      - pattern: import python_dateutils
+      - pattern: from python_dateutils import $Y
+      - pattern: import dateutils
+      - pattern: from dateutils import $Y
+      - pattern: import jeIlyfish
+      - pattern: from jeIlyfish import $Y
+      - pattern: import python3_dateutil
+      - pattern: from python3_dateutil import $Y
+      - pattern: import colourama
+      - pattern: from colourama import $Y
+      - pattern: import beautifulsup4
+      - pattern: from beautifulsup4 import $Y
+      - pattern: import crypt
+      # `crypt` was deprecated/removed in stdlib; the PyPI replacement
+      # `crypt` package is a credential stealer.
+      - pattern: from crypt import $Y
+      - pattern: import setup_tools
+      - pattern: from setup_tools import $Y
+      - pattern: import pytorch
+      # `pytorch` (vs `torch`) is the well-known typo-squat.
+      - pattern: from pytorch import $Y
+      - pattern: import tensorfllow
+      - pattern: from tensorfllow import $Y
+      # Scientific-stack squats (SIEGE b4_3); mirrors the always-on
+      # Tier-0 DEFAULT_TYPO_SQUAT_DENYLIST in gates/denylists.py.
+      - pattern: import mdanalysys
+      - pattern: from mdanalysys import $Y
+      - pattern: import scypi
+      - pattern: from scypi import $Y
+      - pattern: import h5py3
+      - pattern: from h5py3 import $Y
+      - pattern: import pymatgen3
+      - pattern: from pymatgen3 import $Y
+      - pattern: import aes
+      - pattern: from aes import $Y

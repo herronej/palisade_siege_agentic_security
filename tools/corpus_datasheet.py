@@ -1,0 +1,220 @@
+"""
+SIEGE corpus datasheet generator (PALISADE WI21).
+
+Regenerates the corpus-statistics datasheet so the headline count (205 attacks
+/ 42 classes + a benign false-positive control) is decomposable and
+reproducible: per-class instance counts, boundary coverage, threat orientation,
+and the published method each class realizes (read from each instance's
+``references``). The benign control is two suites -- the original 24-task
+``benign_workload`` and the W1 expanded ``benign_diverse`` (~157 tasks) -- so the
+benign total is reported as their sum with a per-suite split. This is the
+artifact-release companion to the reconciliation report -- run it to reproduce
+`docs/palisade/corpus_datasheet.md`, the generated companion the paper's
+Artifact Description names.
+
+Run: ``python -m tools.corpus_datasheet``.
+"""
+
+from __future__ import annotations
+
+import collections
+from dataclasses import dataclass
+from pathlib import Path
+from palisade.paths import CORPUS_DIR, REPO_ROOT
+
+_CORPUS_DIR = CORPUS_DIR
+#: Benign template directories (the §B false-positive control): the original
+#: 24-task ``benign_workload`` plus the W1 expanded ``benign_diverse`` control.
+#: Both are excluded from the attack-class stats and pooled into the benign
+#: count.
+_BENIGN_TEMPLATES = frozenset({"benign_workload", "benign_diverse"})
+
+#: Threat orientation per class (manuscript Table I): F facility-directed,
+#: S science-directed, D delivery vehicle, X cross-boundary. Cross-boundary
+#: chains terminate at a facility sink, so the facility-directed headline count
+#: is F + X.
+_SCIENCE = {"b3_3_data_value_poisoning", "b3_4_citation_forgery",
+            "b3_8_hybrid_retrieval_seam", "b4_5_correctness_sabotage"}
+_DELIVERY = {"b3_1_corpus_poisoning", "b3_2_embedding_space",
+             "b3_7_indirect_injection", "b3_9_tool_return_injection"}
+
+
+def _orientation(cls: str) -> str:
+    if cls.startswith("xc_"):
+        return "X"
+    if cls in _SCIENCE:
+        return "S"
+    if cls in _DELIVERY:
+        return "D"
+    return "F"
+
+
+@dataclass(frozen=True)
+class ClassStat:
+    cls: str
+    boundary: str
+    orientation: str
+    n: int
+    method: str
+
+
+def collect() -> list[ClassStat]:
+    """Read the corpus into per-class stats (count + method), sorted by class id."""
+    import yaml
+
+    stats: list[ClassStat] = []
+    for cdir in sorted(p for p in _CORPUS_DIR.iterdir() if p.is_dir()):
+        cls = cdir.name
+        if cls in _BENIGN_TEMPLATES:
+            continue
+        docs = [yaml.safe_load(p.read_text()) for p in sorted(cdir.glob("*.yaml"))]
+        methods = {r for d in docs for r in (d.get("references") or [])}
+        method = sorted(methods)[0] if methods else "-"
+        stats.append(
+            ClassStat(
+                cls=cls, boundary=cls.split("_")[0].upper(),
+                orientation=_orientation(cls), n=len(docs), method=str(method),
+            )
+        )
+    return stats
+
+
+def benign_count() -> int:
+    """Total benign instances across every benign template directory."""
+    total = 0
+    for name in _BENIGN_TEMPLATES:
+        d = _CORPUS_DIR / name
+        if d.exists():
+            total += len(list(d.glob("*.yaml")))
+    return total
+
+
+def benign_count_by_template() -> dict[str, int]:
+    """Per-template benign counts (e.g. ``benign_workload`` vs ``benign_diverse``)."""
+    counts: dict[str, int] = {}
+    for name in sorted(_BENIGN_TEMPLATES):
+        d = _CORPUS_DIR / name
+        counts[name] = len(list(d.glob("*.yaml"))) if d.exists() else 0
+    return counts
+
+
+def _gate_stack_commit() -> str:
+    """The commit the corpus was decomposed against.
+
+    Read from git rather than hardcoded, so a regenerated datasheet never
+    claims a revision it wasn't produced at.
+    """
+    try:
+        import subprocess
+
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=REPO_ROOT, capture_output=True, text=True, timeout=5,
+        )
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "unknown"
+
+
+def render(stats: list[ClassStat], *, commit: str | None = None) -> str:
+    commit = commit or _gate_stack_commit()
+    n_benign = benign_count()
+    n_attack = sum(s.n for s in stats)
+    by_boundary = collections.Counter()
+    by_orient = collections.Counter()
+    classes_by_boundary = collections.Counter()
+    for s in stats:
+        by_boundary[s.boundary] += s.n
+        by_orient[s.orientation] += s.n
+        classes_by_boundary[s.boundary] += 1
+    facility = by_orient["F"] + by_orient["X"]
+
+    lines = [
+        "<!-- Generated report. Source module: tools.corpus_datasheet. "
+        "Regenerate with `uv run python -m tools.corpus_datasheet`. -->",
+        "",
+        "# SIEGE corpus datasheet",
+        "",
+        "Reproducible decomposition of the SIEGE static corpus, "
+        f"regenerated by `tools.corpus_datasheet` at gate-stack commit `{commit}`. "
+        "Every count is read from the authored instance files on disk; the "
+        "`method` column is each class's cited realization (from its instances' "
+        "`references`).",
+        "",
+        f"**Totals.** {n_attack} attack instances across {len(stats)} classes + "
+        f"{n_benign} benign = **{n_attack + n_benign}** instances.",
+        "",
+        "## By boundary",
+        "",
+        "| boundary | classes | instances |",
+        "|---|---|---|",
+    ]
+    for b in ("B1", "B3", "B4", "B5", "XC"):
+        lines.append(f"| {b} | {classes_by_boundary[b]} | {by_boundary[b]} |")
+    lines.append(f"| benign | — | {n_benign} |")
+    lines += [
+        "",
+        "## By threat orientation",
+        "",
+        "| orientation | instances |",
+        "|---|---|",
+        f"| facility-directed (F) | {by_orient['F']} |",
+        f"| cross-boundary (X), terminating at a facility sink | {by_orient['X']} |",
+        f"| **facility-directed incl. cross-boundary** | **{facility}** |",
+        f"| science-directed (S) | {by_orient['S']} |",
+        f"| delivery vehicle (D) | {by_orient['D']} |",
+        "",
+        f"The manuscript's facility/science/delivery headline is "
+        f"{facility}/{by_orient['S']}/{by_orient['D']}: the {by_orient['X']} "
+        f"cross-boundary chains are counted as facility-directed because they "
+        f"resolve at a facility sink (a submitted job or an executed command).",
+        "",
+        "## Per class",
+        "",
+        "| class | boundary | orient. | n | method realized |",
+        "|---|---|---|---|---|",
+    ]
+    for s in stats:
+        lines.append(
+            f"| `{s.cls}` | {s.boundary} | {s.orientation} | {s.n} | {s.method} |"
+        )
+    by_benign = benign_count_by_template()
+    lines += [
+        "",
+        "## Benign suite",
+        "",
+        f"{n_benign} benign instances (legitimate prompts, retrievals, code, and "
+        "jobs, including dual-use-adjacent scientific tasks) accompany the attack "
+        "corpus; every mitigation number is paired with a benign-utility "
+        "false-positive rate on this suite.",
+        "",
+        "| benign template | # |",
+        "|---|---|",
+    ]
+    for name, n in by_benign.items():
+        lines.append(f"| `{name}` | {n} |")
+    lines += [
+        f"| **total** | **{n_benign}** |",
+        "",
+        "`benign_workload` is the original VISTA-example control; `benign_diverse` "
+        "is the W1 expanded control (imperative-but-benign prompts, "
+        "instruction-quoting retrievals, dual-use-adjacent science, and "
+        "edge-of-policy HPC jobs) authored to sit near the attack manifold so the "
+        "false-positive rate is measured where a signature gate might mis-fire.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def write(path: str | None = None, *, commit: str | None = None) -> str:
+    if path is None:
+        root = REPO_ROOT
+        path = str(root / "docs" / "palisade" / "corpus_datasheet.md")
+    Path(path).write_text(render(collect(), commit=commit), encoding="utf-8")
+    return path
+
+
+if __name__ == "__main__":  # pragma: no cover
+    print(f"wrote {write()}")
