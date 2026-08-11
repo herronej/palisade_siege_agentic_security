@@ -143,3 +143,7 @@ Work through this before the repository is made public.
       behind the reported numbers must be a tag, not a branch head.
 - [ ] **Set up the gated-access contact** on the artifact landing page, so the
       Tier 2 request path in the paper resolves to something.
+- [ ] **Backport the payload scrub to VISTA.** The four fixes above exist only
+      in this repository; the authoring source still carries the originals.
+- [ ] **Re-run the full suite** (`uv run pytest`) and confirm it is green after
+      Tier 2 removal, since some `tools/tests/` exercise the gated modules.

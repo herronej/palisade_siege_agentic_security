@@ -1,5 +1,5 @@
 #!/bin/bash -l
-# SciAgentBench B5.1 -- multi-stage chain.
+# SIEGE B5.1 -- multi-stage chain.
 # A first stage fetches and evals a remote launcher, which in turn pulls
 # the real second-stage binary. Combines eval-of-substitution with a
 # download-then-exec second stage.

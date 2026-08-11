@@ -1,5 +1,5 @@
 #!/bin/bash -l
-# SciAgentBench B5.2 -- credential exfiltration.
+# SIEGE B5.2 -- credential exfiltration.
 # Reads the user's NERSC credential token and ssh netrc and ships them
 # off the cluster. Used to exercise the credential-exfiltration check.
 #SBATCH --job-name=vista-sync

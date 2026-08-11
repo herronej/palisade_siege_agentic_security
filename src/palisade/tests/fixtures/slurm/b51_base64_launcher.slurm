@@ -1,5 +1,5 @@
 #!/bin/bash -l
-# SciAgentBench B5.1 -- base64 launcher.
+# SIEGE B5.1 -- base64 launcher.
 # The payload is embedded base64 and piped straight into a shell, so no
 # attacker host and no plaintext binary name appear in the script.
 #SBATCH --job-name=vista-postprocess

@@ -1,7 +1,7 @@
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 # slurmdbd + mariadb serve the accounting-enforcement configuration (R13-10).
-# They stay inert when CITADEL_ACCOUNTING=0, which is the default and reproduces
+# They stay inert when PALISADE_ACCOUNTING=0, which is the default and reproduces
 # the original no-accounting controller byte for byte.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       slurm-wlm munge slurm-client util-linux \
