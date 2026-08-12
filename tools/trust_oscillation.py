@@ -32,7 +32,7 @@ from siege.redteam.attacks.llm.multiturn_oscillation import (
     MultiTurnOscillation,
     OscillationResult,
 )
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 __all__ = [
     "VariantSummary",

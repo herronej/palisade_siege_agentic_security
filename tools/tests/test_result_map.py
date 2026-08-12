@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from palisade.paths import DOCS_DIR, REPO_ROOT
+from siege.paths import DOCS_DIR, REPO_ROOT
 
 MAP_PATH = DOCS_DIR / "README.md"
 TOOLS_DIR = REPO_ROOT / "tools"

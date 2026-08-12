@@ -49,7 +49,7 @@ from vista_backend.agents.agents import (
     ProjectAgent,
     ProjectAgentResultEvent,
 )
-from palisade.host import HostProject, HostUser
+from palisade.host import HostProjectModel, HostUserModel
 from palisade.capabilities.g1_prompt import BANNER_PREFIX
 
 
@@ -64,7 +64,7 @@ def anyio_backend() -> str:
 
 
 def _make_project(name: str = "g1-integration") -> HostProject:
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(),
         name=name,
         description=None,
@@ -77,7 +77,7 @@ def _make_project(name: str = "g1-integration") -> HostProject:
 
 
 def _make_user() -> HostUser:
-    return HostUser(
+    return HostUserModel(
         id=uuid.uuid4(),
         email="tester@example.com",
         is_admin=False,

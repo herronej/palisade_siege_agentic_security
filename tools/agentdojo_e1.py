@@ -46,7 +46,7 @@ from tools.palisade_screen import (
     looks_like_injection,
     shares_span,
 )
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 try:  # optional dependency
     from agentdojo.agent_pipeline import (

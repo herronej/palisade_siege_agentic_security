@@ -49,7 +49,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 from pathlib import Path
-from palisade.paths import SIEGE_DIR
+from siege.paths import SIEGE_DIR
 
 CONTROL_DIR = (
     SIEGE_DIR

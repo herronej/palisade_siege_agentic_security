@@ -31,7 +31,7 @@ from typing import Any
 
 from palisade.contracts import load_contract_library
 from palisade.contracts.base import UNTRUSTED_KEY, ContractRegistry, run_contract
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 # Repo-root ``palisade_contracts/`` resolved from this file so the oracle
 # works regardless of the process cwd (tests run from backend/).

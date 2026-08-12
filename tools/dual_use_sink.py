@@ -36,7 +36,7 @@ from siege.scorer import score_trace
 from siege.session_runner import SessionRunner
 from siege.templates.dual_use_sink_demo import build as build_demo
 from tools.baseline_hardwin import _FULL, _OFF
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 __all__ = ["DualUseSinkRow", "DualUseSinkResult", "run_dual_use_sink", "write_results_doc"]
 

@@ -46,7 +46,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from tools.eval_figures import CONFIGS, parse_ablation
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 __all__ = [
     "K_SAMPLES",

@@ -59,7 +59,7 @@ from siege.redteam.metrics import AsrAtBudget
 from siege.redteam.orchestrator import HardWinAudit, hard_win_audit
 from siege.redteam.policy import EpsilonGreedyBandit, RandomPolicy
 from siege.redteam.realizer import ParaphraseRealizer
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 if TYPE_CHECKING:
     from siege.ablation_matrix import AblationConfig

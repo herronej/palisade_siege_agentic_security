@@ -26,7 +26,7 @@ pytestmark = pytest.mark.anyio
 from pydantic_ai import Agent
 from pydantic_ai.tools import ToolDefinition
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from palisade.config import PalisadeSettings
 from palisade.gates.g4_code import G4CodeGate, SemgrepFinding
 from palisade.sidecar import PalisadeSidecar
@@ -44,7 +44,7 @@ def anyio_backend() -> str:
 
 
 def _make_project() -> HostProject:
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(),
         name="g4-capability",
         description=None,

@@ -49,7 +49,7 @@ from typing import Any
 from siege.full_ablation import run_full_ablation
 from siege.instance_loader import load_instances
 from siege.smoke_static_qllm import DEFAULT_OPENAI_BASE_URL, DEFAULT_QLLM_MODEL
-from palisade.paths import CORPUS_DIR, REPO_ROOT
+from siege.paths import CORPUS_DIR, REPO_ROOT
 
 __all__ = [
     "E5Row",

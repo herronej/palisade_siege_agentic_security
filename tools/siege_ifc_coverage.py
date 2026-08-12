@@ -54,7 +54,7 @@ from siege.instance_loader import load_instances
 from siege.scorer import score_trace
 from siege.session_runner import SessionRunner
 from tools.baseline_hardwin import _OFF, _class_key
-from palisade.paths import CORPUS_DIR, REPO_ROOT
+from siege.paths import CORPUS_DIR, REPO_ROOT
 
 __all__ = [
     "SinkType",

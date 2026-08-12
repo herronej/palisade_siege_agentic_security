@@ -6,7 +6,7 @@ This is the contribution we most want. The corpus is declarative — one file is
 one instance, one directory is one class — and the runner takes any gate stack
 exposing the same admission interface, so SIEGE is not tied to PALISADE.
 
-Implement the admission interface in `src/siege/eval/runner.py` and pass your
+Implement the admission interface in `siege/src/siege/eval/runner.py` and pass your
 stack to the session runner. Score with `siege.scorer`, which returns soft wins
 and hard wins separately; report both. A defense that closes soft wins and
 leaves hard wins where they are has moved inspection, not enforcement, and the
@@ -17,13 +17,13 @@ as most obviously called for — please tell us. We will cite it.
 
 ## Adding an attack class
 
-1. Add a template under `src/siege/templates/`, following an existing class.
+1. Add a template under `siege/src/siege/templates/`, following an existing class.
 2. Every action must name its gate, carry an attack flag, and — for chained
    attacks — the capability tag whose taint must be tracked to the sink.
 3. Declare a **programmatic** success criterion. Only an indeterminate verdict
    may defer to a language-model judge, whose default is a deterministic stub
    returning "not met", so offline runs stay reproducible.
-4. Generate instances into `src/siege/corpus/<class>/`.
+4. Generate instances into `siege/src/siege/corpus/<class>/`.
 5. Run `uv run pytest tools/tests/test_release_safety.py`. Payload
    destinations must use reserved placeholder hosts — see
    [`docs/palisade/RELEASE_SAFETY.md`](docs/palisade/RELEASE_SAFETY.md). This

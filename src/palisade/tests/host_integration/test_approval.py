@@ -28,7 +28,7 @@ from vista_backend.agents.agents import (
     ProjectAgent,
     ProjectAgentResultEvent,
 )
-from palisade.host import HostProject, HostUser
+from palisade.host import HostProjectModel, HostUserModel
 from palisade.capabilities.approval import ApprovalOutcome, PalisadeApprovalCapability
 
 
@@ -108,7 +108,7 @@ async def test_resolves_each_request_independently() -> None:
 
 
 def _make_project() -> HostProject:
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(),
         name="approval",
         description=None,
@@ -121,7 +121,7 @@ def _make_project() -> HostProject:
 
 
 def _make_user() -> HostUser:
-    return HostUser(id=uuid.uuid4(), email="t@e.com", is_admin=False)
+    return HostUserModel(id=uuid.uuid4(), email="t@e.com", is_admin=False)
 
 
 async def _run_with_approval(decision: str, *, enable_elicitation: bool = True):

@@ -35,7 +35,7 @@ from mcp.types import Tool, ToolAnnotations
 # sync tests inherit the marker harmlessly.
 pytestmark = pytest.mark.anyio
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from palisade.config import PalisadeSettings
 from palisade.gates import g2_tool
 from palisade.gates.g2_tool import (
@@ -142,7 +142,7 @@ def _tool(
 
 def _make_project() -> HostProject:
     """Minimal valid `HostProject` for sidecar tests."""
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(),
         name="test-project",
         description=None,

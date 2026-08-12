@@ -29,7 +29,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 __all__ = [
     "CONFIGS",

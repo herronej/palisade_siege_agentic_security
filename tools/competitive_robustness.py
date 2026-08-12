@@ -53,7 +53,7 @@ from siege.instance_loader import load_instances
 from siege.scorer import score_trace
 from siege.session_runner import SessionRunner
 from tools.fuzz_slurm_parser import FuzzReport, fuzz_parser_and_ioc
-from palisade.paths import CORPUS_DIR, REPO_ROOT
+from siege.paths import CORPUS_DIR, REPO_ROOT
 
 __all__ = [
     "BaselineComparison",

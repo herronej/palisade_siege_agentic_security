@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from palisade.paths import CONTROLS_DIR, CORPUS_DIR, SIEGE_DIR
+from siege.paths import CONTROLS_DIR, CORPUS_DIR, SIEGE_DIR
 
 # RFC 2606 / 6761 reserved TLDs and second-level names.
 RESERVED_SUFFIXES = (

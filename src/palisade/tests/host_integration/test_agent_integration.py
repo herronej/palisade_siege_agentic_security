@@ -16,13 +16,13 @@ from __future__ import annotations
 import uuid
 
 from vista_backend.agents.agents import ProjectAgent
-from palisade.host import HostProject, HostUser
+from palisade.host import HostProjectModel, HostUserModel
 from palisade.sidecar import PalisadeSidecar
 
 
 def _make_project(name: str = "agent-integration") -> HostProject:
     """Construct a minimal valid `HostProject`."""
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(),
         name=name,
         description=None,
@@ -35,7 +35,7 @@ def _make_project(name: str = "agent-integration") -> HostProject:
 
 
 def _make_user() -> HostUser:
-    return HostUser(
+    return HostUserModel(
         id=uuid.uuid4(), email="tester@example.com", is_admin=False,
     )
 

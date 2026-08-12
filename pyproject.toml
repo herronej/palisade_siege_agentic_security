@@ -1,11 +1,11 @@
 [project]
-name = "palisade-siege"
+name = "palisade"
 version = "1.0.0"
-description = "PALISADE: a privileged security-mediation sidecar for agentic scientific platforms, and SIEGE, its adversarial benchmark."
+description = "PALISADE: a privileged security-mediation sidecar for agentic scientific platforms."
 readme = "README.md"
 requires-python = "==3.14.3"
 # license: set at release time -- see LICENSE (placeholder) and NOTICE
-# license = { file = "LICENSE" }
+# license = { text = "..." }
 authors = [
     { name = "Emily Herron", email = "herronej@ornl.gov" },
     { name = "Josh Hutchins" },
@@ -22,7 +22,6 @@ keywords = [
     "hpc",
     "slurm",
     "provenance",
-    "adversarial-benchmark",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -32,10 +31,14 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 
+# Runtime only. PALISADE is installed as a dependency of a host application,
+# so this list stays to what the sidecar itself imports -- the benchmark's
+# dependencies (and its 205-instance corpus) live in the `siege` member and
+# never reach a host's production environment.
+#
 # Pinned, not floated. These are the versions the reported numbers were
 # produced against; `pydantic-ai>=1.90` in particular floats to a 2.x that
 # removes `MCPServerStreamableHTTP`, which G2's descriptor pinning depends on.
-# The lockfile is the authority; these pins keep a fresh resolve honest.
 dependencies = [
     "pydantic-ai==1.90.0",
     "pydantic-ai-shields==0.3.2",
@@ -43,11 +46,8 @@ dependencies = [
     "python-dotenv==1.2.2",
     "pyyaml==6.0.3",
     "anyio[trio]==4.13.0",
-    "openai==2.35.0",
     "jsonschema==4.26.0",
     "numpy==2.4.4",
-    # Clopper-Pearson / bootstrap intervals for every reported rate.
-    "scipy==1.17.1",
 ]
 
 [project.optional-dependencies]
@@ -56,32 +56,18 @@ dependencies = [
 # reproduces without network access.
 palisade-g4 = ["semgrep==1.79.0"]
 
-# G3 corpus-integrity pinning against a served ChromaDB store, and the
-# embedding-space attack family (b3_2). Heavy; only these paths need it.
+# G3 corpus-integrity pinning against a served ChromaDB store. Heavy; only
+# the `pin_corpus` operator CLI and the live G3 check need it.
 retrieval = ["chromadb==1.5.9", "sentence-transformers==5.5.0"]
 
 # Provenance shipping to a Flowcept broker. Lazily imported: the sidecar
 # degrades to JSONL when the broker is unreachable or the extra is absent.
 flowcept = ["flowcept"]
 
-# The AgentDojo external-benchmark probe (Appendix D). Needs a served model.
-agentdojo = ["agentdojo==0.1.35"]
-
-# Figure generation for the ablation and budget-curve plots.
-figures = ["matplotlib==3.11.1"]
-
-# Detector baselines (Prompt-Guard-86M, Prompt Guard 2). Downloads weights.
-baselines = ["transformers>=4.44", "torch>=2.4"]
-
-dev = ["pytest==9.0.3"]
-
-# Everything needed to reproduce every offline result in the paper.
-repro = [
-    "palisade-siege[palisade-g4,figures,retrieval,dev]",
-]
+# The quarantined slow tier talks to an OpenAI-compatible endpoint.
+quarantine = ["openai==2.35.0"]
 
 [project.scripts]
-siege-run = "siege.eval.__main__:main"
 palisade-pin-corpus = "palisade.pin_corpus:main"
 
 [project.urls]
@@ -94,16 +80,31 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-# `tools/` is deliberately NOT packaged: the analysis modules are run from a
-# checkout as `python -m tools.<module>`, which is how the paper cites them.
-packages = ["src/palisade", "src/siege"]
+packages = ["src/palisade"]
 artifacts = ["*.md", "*.yaml", "*.json", "*.lua"]
 
+# --------------------------------------------------------------------------
+# Workspace. One checkout, two distributions: a host application depends on
+# `palisade` alone and never installs the attack corpus.
+# --------------------------------------------------------------------------
+[tool.uv.workspace]
+members = ["siege"]
+
+[tool.uv.sources]
+siege = { workspace = true }
+
 [dependency-groups]
-dev = ["pytest==9.0.3"]
+# Reproducing the paper needs the benchmark; deploying the sidecar does not.
+dev = [
+    "siege",
+    "siege[agentdojo,figures,retrieval]",
+    "palisade[palisade-g4,quarantine,retrieval]",
+    "pytest==9.0.3",
+    "scipy==1.17.1",
+]
 
 [tool.pytest.ini_options]
-testpaths = ["src/palisade", "src/siege", "tools"]
+testpaths = ["src/palisade", "siege/src/siege", "tools"]
 # `tools` is a repo-root package, not an installed one -- the paper cites
 # the analysis modules as `tools.*` and they run from a checkout.
 pythonpath = ["."]

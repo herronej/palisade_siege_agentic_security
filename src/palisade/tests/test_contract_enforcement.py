@@ -175,10 +175,10 @@ async def test_check_slow_noop_without_contracts_or_claims() -> None:
 
 
 def _make_sidecar(**flags: bool):
-    from palisade.host import HostProject
+    from palisade.host import HostProjectModel
     from palisade.sidecar import PalisadeSidecar
 
-    project = HostProject(
+    project = HostProjectModel(
         id=uuid.uuid4(), name="g3-contract", description=None, system_prompt=None,
         skills=[], knowledge_bases=[], tools=[], usage_limits={},
     )

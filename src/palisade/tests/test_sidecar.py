@@ -15,7 +15,7 @@ import pytest
 # inherit it harmlessly.
 pytestmark = pytest.mark.anyio
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from palisade.capabilities import CapabilityRegistry
 from palisade.config import PalisadeSettings
 from palisade.gates.base import PassThroughGate
@@ -32,7 +32,7 @@ from palisade.trust import TrustScorer
 
 def _make_project(name: str = "test-project") -> HostProject:
     """Construct a minimal valid `HostProject` for sidecar tests."""
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(),
         name=name,
         description=None,

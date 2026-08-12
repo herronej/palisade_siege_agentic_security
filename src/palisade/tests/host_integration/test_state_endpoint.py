@@ -31,7 +31,7 @@ from vista_backend.api.palisade import router as palisade_router
 from vista_backend.api.auth import get_user
 from palisade.config import PalisadeSettings
 from vista_backend.db.db import _get_session
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from vista_backend.services import project as project_service
 from palisade.trust import TrustScorer
 
@@ -42,7 +42,7 @@ REAUTH_URL = "/projects/demo/palisade/reauth"
 
 
 def _project() -> HostProject:
-    return HostProject(
+    return HostProjectModel(
         id=PROJECT_ID, name="demo", description=None, system_prompt=None,
         skills=[], knowledge_bases=[], tools=[], usage_limits={},
     )

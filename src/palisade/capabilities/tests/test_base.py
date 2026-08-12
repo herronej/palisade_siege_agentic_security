@@ -18,7 +18,7 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.models.test import TestModel
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from palisade.config import PalisadeSettings
 from palisade.gates.base import Gate, GateContext, GateDecision, PassThroughGate
 from palisade.sidecar import PalisadeSidecar
@@ -32,7 +32,7 @@ from palisade.capabilities.base import PalisadeCapability
 
 def _make_project(name: str = "test-project") -> HostProject:
     """Construct a minimal valid `HostProject` for sidecar construction."""
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(),
         name=name,
         description=None,

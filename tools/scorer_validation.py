@@ -81,7 +81,7 @@ from siege.session_runner import (
     _HIGH_PRIV_SINKS,
     _TRUSTED_SINK_SOURCE_PREFIXES,
 )
-from palisade.paths import CORPUS_DIR
+from siege.paths import CORPUS_DIR
 
 _CORPUS = (
     CORPUS_DIR

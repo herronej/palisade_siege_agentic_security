@@ -30,15 +30,15 @@ making the paper's central claim unfalsifiable.
 | The information-flow model: labels, propagation, sink predicates | `src/palisade/capabilities/propagation.py`, `registry.py` |
 | Trust scorer, incident playbook, provenance bus | `src/palisade/trust.py`, `incidents.py`, `provenance.py` |
 | The contract library (11 contracts) and bundled Semgrep rules | `src/palisade/contracts/` |
-| The 205-instance attack corpus in 42 classes | `src/siege/corpus/b*/`, `src/siege/corpus/xc*/` |
-| The 181-task benign control | `src/siege/corpus/benign_workload/`, `benign_diverse/` |
-| Per-class ground truth and adjudication | `src/siege/oracles/`, `src/siege/scorer.py` |
-| The replay harness and the nine-configuration ablation | `src/siege/eval/`, `src/siege/ablation_matrix.py` |
-| Trained attack policies | `src/siege/redteam/policy.py`, `attacker.py` |
-| Transform libraries (semantics-preserving evasion operators) | `src/siege/redteam/realizer.py`, `redteam/attacks/` |
-| Reward-ranked evasive pools (80 instances, 4 × 20) | `src/siege/corpus_generated/` |
-| The reward model that ranks them | `src/siege/redteam/reward.py`, `generator.py` |
-| The optimizing drivers (PAIR / TAP) | `src/siege/redteam/llm_optimizer.py`, `embedding_optimizer.py` |
+| The 205-instance attack corpus in 42 classes | `siege/src/siege/corpus/b*/`, `siege/src/siege/corpus/xc*/` |
+| The 181-task benign control | `siege/src/siege/corpus/benign_workload/`, `benign_diverse/` |
+| Per-class ground truth and adjudication | `siege/src/siege/oracles/`, `siege/src/siege/scorer.py` |
+| The replay harness and the nine-configuration ablation | `siege/src/siege/eval/`, `siege/src/siege/ablation_matrix.py` |
+| Trained attack policies | `siege/src/siege/redteam/policy.py`, `attacker.py` |
+| Transform libraries (semantics-preserving evasion operators) | `siege/src/siege/redteam/realizer.py`, `redteam/attacks/` |
+| Reward-ranked evasive pools (80 instances, 4 × 20) | `siege/src/siege/corpus_generated/` |
+| The reward model that ranks them | `siege/src/siege/redteam/reward.py`, `generator.py` |
+| The optimizing drivers (PAIR / TAP) | `siege/src/siege/redteam/llm_optimizer.py`, `embedding_optimizer.py` |
 | All analysis modules behind reported numbers | `tools/` |
 | The facility `job_submit.lua` policy comparison | `tools/artifacts/job_submit.lua` |
 | The containerized single-node `slurmctld` | `docker/slurm/` |
@@ -168,6 +168,10 @@ Work through this before the repository is made public.
       in `NOTICE`.
 - [ ] **Mint the DOI**, tag the release, and update `CITATION.cff`. The state
       behind the reported numbers must be a tag, not a branch head.
+- [ ] **Verify the runtime wheel carries no corpus.** `uv build --all-packages`
+      then check the `palisade` wheel: it must contain 0 files under
+      `corpus/`. A host application installs `palisade` alone, and attack
+      payloads must not reach a production deployment.
 - [ ] **Backport the payload scrub to VISTA.** The four fixes above exist only
       in this repository; the authoring source still carries the originals.
 - [ ] **Re-run the full suite** (`uv run pytest`) and confirm it is green.

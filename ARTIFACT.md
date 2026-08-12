@@ -186,7 +186,7 @@ Recorded here because an AE reviewer will compare the two.
 4. **The MCP tool manifest is frozen.** The corpus-realism checks normally
    AST-parse VISTA's live `mcp_servers/` tree. The standalone artifact ships a
    snapshot of the 21 tool contracts
-   (`src/siege/realism/mcp_tool_manifest.json`); the live tree wins when
+   (`siege/src/siege/realism/mcp_tool_manifest.json`); the live tree wins when
    present.
 5. **Payload scrub.** Four payload destinations naming real-world identifiers
    were replaced with reserved placeholders during release preparation, two of

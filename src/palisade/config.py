@@ -490,7 +490,7 @@ class PalisadeSettings(BaseSettings):
     # Contract library
     # -----------------------------------------------------------------
 
-    contracts_dir: str = "../palisade_contracts"
+    contracts_dir: str = "palisade_contracts"
     """
     Filesystem path to the scientist-authored contract library. The
     runtime loads contracts from this directory at startup; the

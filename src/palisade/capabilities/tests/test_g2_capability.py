@@ -29,7 +29,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.tools import ToolDefinition
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from palisade.config import PalisadeSettings
 from palisade.gates.g2_tool import G2ToolGate
 from palisade.quarantine import build_quarantine_agent
@@ -49,7 +49,7 @@ def anyio_backend() -> str:
 
 
 def _make_project() -> HostProject:
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(),
         name="g2-capability",
         description=None,

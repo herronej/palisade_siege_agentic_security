@@ -30,7 +30,7 @@ pytestmark = pytest.mark.anyio
 from pydantic_ai.exceptions import SkipToolExecution
 from pydantic_ai.tools import ToolDefinition
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from palisade.capabilities.g5_hpc import STICKY_KEY_BY_CHECK, G5HpcCapability
 from palisade.config import PalisadeSettings
 from palisade.gates.g5_hpc import AllocationLimits, AllocationPolicy, G5HpcJobGate
@@ -44,7 +44,7 @@ def anyio_backend() -> str:
 
 
 def _make_sidecar(*, enabled: bool = True) -> PalisadeSidecar:
-    project = HostProject(
+    project = HostProjectModel(
         id=uuid.uuid4(), name="g5-sticky", description=None, system_prompt=None,
         skills=[], knowledge_bases=[], tools=[], usage_limits={},
     )

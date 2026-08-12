@@ -1,0 +1,44 @@
+[project]
+name = "siege"
+version = "1.0.0"
+description = "SIEGE: an adversarial benchmark for agentic AI in scientific workflows — 205 attack instances across 42 classes against a 181-task benign control, with static and adaptive modes."
+readme = "src/siege/README.md"
+requires-python = "==3.14.3"
+authors = [
+    { name = "Emily Herron", email = "herronej@ornl.gov" },
+    { name = "Feiyi Wang", email = "fwang2@ornl.gov" },
+]
+
+# SIEGE measures a gate stack; PALISADE is the one it was authored against.
+# The runner takes any stack exposing the same admission interface, so this is
+# a dependency on the reference implementation, not a coupling to it.
+dependencies = [
+    "palisade==1.0.0",
+    "pyyaml==6.0.3",
+    "numpy==2.4.4",
+    "scipy==1.17.1",
+]
+
+[project.optional-dependencies]
+# The AgentDojo external-benchmark probe (paper, Appendix D).
+agentdojo = ["agentdojo==0.1.35"]
+# Figure generation for the ablation and budget-curve plots.
+figures = ["matplotlib==3.11.1"]
+# Detector baselines (Prompt-Guard-86M, Prompt Guard 2). Downloads weights.
+baselines = ["transformers>=4.44", "torch>=2.4"]
+# The embedding-space attack family and G3 corpus-integrity pinning.
+retrieval = ["chromadb==1.5.9", "sentence-transformers==5.5.0"]
+
+[project.scripts]
+siege-run = "siege.eval.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/siege"]
+artifacts = ["*.md", "*.yaml", "*.json"]
+
+[tool.uv.sources]
+palisade = { workspace = true }

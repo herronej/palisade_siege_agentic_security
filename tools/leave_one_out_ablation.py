@@ -35,7 +35,7 @@ from pathlib import Path
 from siege.eval.siege_runner import run_siege_evaluation
 from siege.ablation_matrix import LEAVE_ONE_OUT_CONFIGS
 from siege.scorer import wilson_interval
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 __all__ = [
     "FamilyRollup",

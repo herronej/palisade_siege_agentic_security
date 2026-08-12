@@ -27,7 +27,9 @@ from pathlib import Path
 
 import pytest
 import yaml
-from palisade.paths import PALISADE_DIR, REPO_ROOT
+from palisade.paths import PALISADE_DIR, require_repo_root
+
+REPO_ROOT = require_repo_root()
 
 
 # -----------------------------------------------------------------

@@ -20,7 +20,7 @@ from __future__ import annotations
 import collections
 from dataclasses import dataclass
 from pathlib import Path
-from palisade.paths import CORPUS_DIR, REPO_ROOT
+from siege.paths import CORPUS_DIR, REPO_ROOT
 
 _CORPUS_DIR = CORPUS_DIR
 #: Benign template directories (the §B false-positive control): the original

@@ -62,7 +62,7 @@ from siege.oracles.correctness_oracle import (
     extract_instance_claims,
 )
 from tools.grounded_but_wrong import _KNOWN_SOURCE, _references
-from palisade.paths import CORPUS_DIR
+from siege.paths import CORPUS_DIR
 
 _CORPUS_DIR = CORPUS_DIR
 

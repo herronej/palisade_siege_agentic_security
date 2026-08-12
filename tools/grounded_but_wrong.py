@@ -48,7 +48,7 @@ from pathlib import Path
 from palisade.contracts.base import UNTRUSTED_KEY
 from siege.oracles import ground_truth as gt
 from siege.oracles.correctness_oracle import CorrectnessOracle
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 __all__ = [
     "ClaimBlindSpot",

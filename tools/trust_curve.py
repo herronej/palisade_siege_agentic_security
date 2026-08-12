@@ -48,7 +48,7 @@ from palisade.config import PalisadeSettings
 from siege.redteam.attacks.llm.multiturn_oscillation import MultiTurnOscillation
 from palisade.trust import TrustScorer
 from tools.benign_fpr import clopper_pearson, measure_benign_fpr
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 __all__ = [
     "CapabilityCurve",

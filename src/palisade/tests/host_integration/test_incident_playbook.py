@@ -26,7 +26,7 @@ pytestmark = pytest.mark.anyio
 from pydantic_ai.models.function import FunctionModel
 
 from vista_backend.agents.agents import ProjectAgent, ProjectAgentResultEvent
-from palisade.host import HostProject, HostUser
+from palisade.host import HostProjectModel, HostUserModel
 from palisade.config import PalisadeSettings
 from palisade.incidents import IncidentManager
 from palisade.capabilities.registry import TrustTier
@@ -137,14 +137,14 @@ def test_disabled_master_flag_makes_record_a_noop() -> None:
 
 
 def _make_project() -> HostProject:
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(), name="playbook", description=None, system_prompt=None,
         skills=[], knowledge_bases=[], tools=[], usage_limits={},
     )
 
 
 def _make_user() -> HostUser:
-    return HostUser(
+    return HostUserModel(
         id=uuid.uuid4(), email="tester@example.com", is_admin=False,
     )
 

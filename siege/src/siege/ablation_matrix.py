@@ -51,7 +51,7 @@ from palisade.gates.g3_rag import G3RagGate
 from palisade.gates.g4_code import G4SandboxCodeGate
 from palisade.gates.g5_hpc import AllocationPolicy, G5HpcJobGate
 from palisade.gates.g6_egress import G6EgressGate
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 
 # -----------------------------------------------------------------

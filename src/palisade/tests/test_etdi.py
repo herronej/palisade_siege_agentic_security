@@ -41,7 +41,7 @@ pytestmark = pytest.mark.anyio
 
 from mcp.types import Tool, ToolAnnotations
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from palisade.capabilities import CapabilityRegistry
 from palisade.config import PalisadeSettings
 from palisade.gates.base import GateContext
@@ -72,7 +72,7 @@ def _make_project(
     tools: list[str] | None = None,
     knowledge_bases: list[str] | None = None,
 ) -> HostProject:
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(),
         name="test-project",
         description=None,

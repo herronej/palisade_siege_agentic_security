@@ -30,15 +30,26 @@ from pathlib import Path
 
 from palisade.corpus_integrity import compute_corpus_hash, resolve_kb_chroma_path
 from palisade.gates.g3_rag import KB_POLICY_FILENAME, KB_POLICY_VERSION
-from palisade.paths import REPO_ROOT
+from palisade.config import PalisadeSettings
+from palisade.paths import find_repo_root
 
-# pin_corpus.py -> palisade -> vista_backend -> src -> backend -> repo root.
-# The backend's ResolvedPath config resolves "../data/..." / "../palisade_contracts"
-# against its cwd (backend/), which lands at exactly these repo-root paths; we
-# resolve them from the package location instead so the CLI is cwd-independent.
-_REPO_ROOT = REPO_ROOT
-_DEFAULT_KB_DIR = _REPO_ROOT / "data" / "knowledge-bases"
-_DEFAULT_CONTRACTS_DIR = _REPO_ROOT / "palisade_contracts"
+# Defaults come from the deployment's own settings (`PALISADE_CONTRACTS_DIR`,
+# `PALISADE_KNOWLEDGE_BASES_DIR`), so this CLI works when PALISADE is installed
+# as a library into a host application and there is no PALISADE checkout to
+# measure paths against. In a checkout the repo root is a better anchor than
+# the cwd, so it is preferred when one exists; both are only argparse
+# defaults, and `--knowledge-bases-dir` / `--contracts-dir` override either.
+_SETTINGS = PalisadeSettings()
+_ANCHOR = find_repo_root() or Path.cwd()
+
+
+def _resolve(configured: str) -> Path:
+    p = Path(configured)
+    return p if p.is_absolute() else (_ANCHOR / p).resolve()
+
+
+_DEFAULT_KB_DIR = _resolve(_SETTINGS.knowledge_bases_dir)
+_DEFAULT_CONTRACTS_DIR = _resolve(_SETTINGS.contracts_dir)
 
 
 def _load_policy(policy_path: Path) -> dict:

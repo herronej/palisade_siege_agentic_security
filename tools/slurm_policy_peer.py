@@ -68,7 +68,7 @@ from siege.ablation_matrix import _EVAL_G5_ALLOCATION_POLICY
 from siege.instance_loader import load_instances
 from siege.corpus_builder import CORPUS_DIR
 from tools.benign_fpr import clopper_pearson
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 # ----------------------------------------------------------------------
 # Site policy -- mirrors palisade_contracts/g5_allocation_policy.json and

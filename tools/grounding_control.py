@@ -48,7 +48,7 @@ from pathlib import Path
 from siege import load_instances
 from siege.ablation_matrix import CUMULATIVE_CONFIGS
 from siege.session_runner import SessionRunner
-from palisade.paths import SIEGE_DIR
+from siege.paths import SIEGE_DIR
 
 CONTROL_DIR = (
     SIEGE_DIR

@@ -41,7 +41,7 @@ from siege.redteam.llm_optimizer import Strategy
 from siege.redteam.manuscript import g1_access_tier_table, g3_embedding_sweep
 from siege.redteam.metrics import AsrAtBudget
 from siege.redteam.reward import WinKind
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 __all__ = [
     "E4Row",

@@ -72,7 +72,7 @@ from siege.session_runner import (
 from tools.baseline_hardwin import _OFF, _class_key
 from tools.siege_ifc_coverage import BASELINES, SINK_TYPES, SinkType
 from tools.taint_coverage import _value_string
-from palisade.paths import CORPUS_DIR, REPO_ROOT
+from siege.paths import CORPUS_DIR, REPO_ROOT
 
 __all__ = ["PeerVerdict", "SinkTypeResult", "PeerResult", "run_dataflow_peer", "write_results_doc"]
 

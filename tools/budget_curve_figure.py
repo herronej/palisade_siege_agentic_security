@@ -27,7 +27,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 __all__ = ["Series", "parse_curves", "render_figure", "main"]
 

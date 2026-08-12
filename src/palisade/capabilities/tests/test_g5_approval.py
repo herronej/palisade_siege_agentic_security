@@ -34,7 +34,7 @@ from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import ToolDefinition
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from palisade.config import PalisadeSettings
 from palisade.gates.g5_hpc import G5HpcJobGate
 from palisade.sidecar import PalisadeSidecar
@@ -48,7 +48,7 @@ def anyio_backend() -> str:
 
 
 def _make_sidecar(*, enabled: bool = True, g5_enabled: bool = True) -> PalisadeSidecar:
-    project = HostProject(
+    project = HostProjectModel(
         id=uuid.uuid4(), name="g5-approval", description=None, system_prompt=None,
         skills=[], knowledge_bases=[], tools=[], usage_limits={},
     )

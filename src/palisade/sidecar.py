@@ -203,7 +203,24 @@ class PalisadeSidecar:
         if self._judge is False:
             return None
         if self._judge is None:
-            from siege.redteam.baselines.detectors import LlmJudgeDetector
+            # The judge is an *evaluation* stage: it is one of SIEGE's detector
+            # baselines, wired into the stack for the `+all +judge` comparison
+            # rather than for the recommended posture. SIEGE is not a runtime
+            # dependency, so a deployment that installed `palisade` alone has
+            # no judge to wire -- degrade to "no judge" exactly as an
+            # unconfigured endpoint does below, rather than raising inside a
+            # request.
+            try:
+                from siege.redteam.baselines.detectors import LlmJudgeDetector
+            except ImportError:
+                logger.warning(
+                    "PALISADE: judge_enabled is set but the SIEGE benchmark "
+                    "package is not installed, so no judge is available; the "
+                    "slow tier will run without it. The judge is an evaluation "
+                    "configuration -- install `siege` to use it."
+                )
+                self._judge = False
+                return None
 
             detector = LlmJudgeDetector(
                 model=getattr(self._settings, "judge_model", "gpt-oss-120b")

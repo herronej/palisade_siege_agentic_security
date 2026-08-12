@@ -373,13 +373,13 @@ import uuid
 
 from pydantic_ai.tools import ToolDefinition
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from palisade.capabilities.g5_hpc import G5HpcCapability
 from palisade.sidecar import PalisadeSidecar
 
 
 def _make_sidecar(*, quarantine: bool = True) -> PalisadeSidecar:
-    project = HostProject(
+    project = HostProjectModel(
         id=uuid.uuid4(), name="g5-slow", description=None, system_prompt=None,
         skills=[], knowledge_bases=[], tools=[], usage_limits={},
     )

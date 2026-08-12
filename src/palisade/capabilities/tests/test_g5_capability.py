@@ -29,7 +29,7 @@ from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import ToolDefinition
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from palisade.config import PalisadeSettings
 from palisade.gates.g5_hpc import AllocationLimits, AllocationPolicy, G5HpcJobGate
 from palisade.sidecar import PalisadeSidecar
@@ -52,7 +52,7 @@ def anyio_backend() -> str:
 
 
 def _make_project() -> HostProject:
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(),
         name="g5-capability",
         description=None,
@@ -158,11 +158,21 @@ def test_capability_absent_when_master_flag_off() -> None:
         assert cap.is_enabled() is False
 
 
-def test_sidecar_builds_g5_gate_with_default_policy() -> None:
-    sidecar = _make_sidecar()
+def test_sidecar_builds_g5_gate_with_default_policy(tmp_path) -> None:
+    """With no operator policy file present, G5 falls back to bundled defaults.
+
+    The contracts dir is pointed at an empty directory explicitly. Relying on
+    the *default* `contracts_dir` here would test nothing: it resolves to the
+    repository's real `palisade_contracts/`, whose policy file does enforce
+    allocations, so this assertion only held while that default happened to
+    point outside the tree.
+    """
+    sidecar = PalisadeSidecar(
+        PalisadeSettings(enabled=True, g5_enabled=True, contracts_dir=str(tmp_path)),
+        _make_project(),
+    )
     gate = sidecar.gates.get("G5")
     assert isinstance(gate, G5HpcJobGate)
-    # No operator policy file in the test contracts dir -> bundled defaults.
     assert gate.policy.allocations_enforced is False
 
 

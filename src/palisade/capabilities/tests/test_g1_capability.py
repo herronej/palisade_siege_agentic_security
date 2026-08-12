@@ -30,7 +30,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import FunctionModel
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from palisade.capabilities import TrustTier
 from palisade.config import PalisadeSettings
 from palisade.sidecar import PalisadeSidecar
@@ -54,7 +54,7 @@ def anyio_backend() -> str:
 
 
 def _make_project() -> HostProject:
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(),
         name="g1-capability",
         description=None,

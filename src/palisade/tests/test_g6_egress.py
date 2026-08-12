@@ -24,7 +24,9 @@ from palisade.config import PalisadeSettings
 from palisade.gates.g6_egress import G6EgressGate
 from palisade.sidecar import PalisadeSidecar
 from palisade.tests.test_sidecar import _make_project
-from palisade.paths import REPO_ROOT
+from palisade.paths import require_repo_root
+
+REPO_ROOT = require_repo_root()
 
 # Absolute path to the operator contract library (cwd-independent), so the
 # sidecar's registry includes ``provenance_binding``.

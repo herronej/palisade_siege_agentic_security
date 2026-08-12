@@ -49,7 +49,7 @@ from siege.ablation_matrix import (
 )
 from siege.corpus_builder import CORPUS_DIR
 from siege.report_suites import BENIGN_TEMPLATES
-from palisade.paths import CORPUS_DIR
+from siege.paths import CORPUS_DIR
 
 #: The augmented ``full +all`` config (all gates + Semgrep + Q-LLM slow tier).
 _FULL_BOTH: AblationConfig = next(c for c in AUGMENTED_CONFIGS if c.name == "full +all")

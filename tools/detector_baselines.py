@@ -51,7 +51,7 @@ from siege import load_instances
 from siege.corpus_builder import CORPUS_DIR
 from tools.baseline_hardwin import BaselineHardWinResult, run_baseline_hardwin
 from tools.benign_fpr import clopper_pearson
-from palisade.paths import REPO_ROOT
+from siege.paths import REPO_ROOT
 
 __all__ = [
     "DetectorBaseline",

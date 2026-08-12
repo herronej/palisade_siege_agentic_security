@@ -82,7 +82,7 @@ src/palisade/          the sidecar
   trust.py incidents.py  sticky-floor trust scorer and incident playbook
   provenance.py          one chokepoint; every decision emitted as an event
 
-src/siege/             the benchmark
+siege/src/siege/       the benchmark  (separate distribution)
   corpus/                205 attack instances, one directory per class
   controls/              the 181-task benign control
   templates/             the authoring templates each class derives from
@@ -109,7 +109,7 @@ Requires Python 3.14.3 and [uv](https://docs.astral.sh/uv/). Everything below
 runs on one workstation with no facility allocation and no account.
 
 ```bash
-uv sync --extra repro
+uv sync
 ```
 
 Run the test suite (2000+ tests, deterministic, no network):
@@ -143,17 +143,23 @@ agent is byte-identical to the unguarded baseline.**
 
 ```python
 from palisade.config import PalisadeSettings
-from palisade.host import HostProject
 from palisade.sidecar import PalisadeSidecar
 
 settings = PalisadeSettings(enabled=True, g1_enabled=True, g5_enabled=True)
-sidecar = PalisadeSidecar(project=HostProject(id=..., name="my-project"), settings=settings)
+sidecar = PalisadeSidecar(settings, my_project)   # your own project object
 agent = Agent(..., capabilities=sidecar.build_capabilities())
 ```
 
-`palisade.host` states the minimum shape the sidecar reads from its host — the
-project it acts within and the principal it acts for. A host application may
-pass its own richer models instead, provided they carry those attributes.
+`my_project` is **your** object, passed unconverted. `palisade.host.HostProject`
+is a `typing.Protocol` stating the minimum shape the sidecar reads — `id`,
+`name`, `knowledge_bases`, `tools` — so a host satisfies it structurally with
+no base class to inherit, no adapter, and no validation or copying at runtime.
+`HostProjectModel` is a concrete implementation for hosts that have no such
+object of their own.
+
+Configure it from the environment as `PALISADE_<FIELD>` (see `.env.sample`), or
+mount `PalisadeSettings` as a nested field on your own settings object — the
+sidecar only ever reads the instance it is handed.
 
 The reference deployment is VISTA, a FastMCP/PydanticAI platform whose
 retrieval, sandboxed execution, Slurm submission and citation egress exercise
@@ -168,7 +174,7 @@ skip automatically without it; nothing the paper reports depends on them.
 The corpus is declarative — one file is one instance, one directory is one
 class — and the runner takes any gate stack exposing the same admission
 interface. SIEGE is meant to be run against defenses other than ours. See
-`src/siege/README.md` for the admission interface and
+`siege/src/siege/README.md` for the admission interface and
 `docs/palisade/RELEASE_SAFETY.md` for what the public corpus does and does not
 contain.
 
@@ -201,3 +207,26 @@ See [`CITATION.cff`](CITATION.cff). The archival DOI is minted at camera-ready;
 This software was authored by UT-Battelle, LLC under Contract No.
 DE-AC05-00OR22725 with the U.S. Department of Energy. See [`NOTICE`](NOTICE).
 # palisade_siege_agentic_security
+
+---
+
+## Installing PALISADE into a host application
+
+The repository is a uv workspace with two distributions. A host depends on
+`palisade` alone — 444 KB, no attack corpus — while `siege` and its 205
+instances stay out of the deployment.
+
+```toml
+# the host's pyproject.toml
+dependencies = ["palisade==1.0.0"]
+
+[tool.uv.sources]
+palisade = { git = "https://github.com/ORNL/palisade-siege", tag = "v1.0.0", subdirectory = "." }
+```
+
+Pin a tag rather than a branch: the reported numbers are a release tag, and a
+gate stack that drifts underneath a deployment is a security change nobody
+reviewed.
+
+`uv sync` in *this* repository installs both members plus the analysis
+dependencies, which is what reproduction needs.

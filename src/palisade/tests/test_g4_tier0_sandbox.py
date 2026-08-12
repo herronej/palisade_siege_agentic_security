@@ -25,7 +25,9 @@ from palisade.gates.g4_code import (
 )
 from palisade.sidecar import PalisadeSidecar
 from palisade.tests.test_sidecar import _make_project
-from palisade.paths import REPO_ROOT
+from palisade.paths import require_repo_root
+
+REPO_ROOT = require_repo_root()
 
 _CONTRACTS = str(REPO_ROOT / "palisade_contracts")
 

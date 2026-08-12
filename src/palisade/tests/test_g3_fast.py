@@ -32,7 +32,7 @@ import pytest
 # anyio's pytest plugin requires async tests to be marked.
 pytestmark = pytest.mark.anyio
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from pydantic_ai.exceptions import SkipToolExecution
 from pydantic_ai.tools import ToolDefinition
 
@@ -62,7 +62,7 @@ from palisade.trust import TrustScorer
 
 
 def _make_project(name: str = "test-project") -> HostProject:
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(),
         name=name,
         description=None,

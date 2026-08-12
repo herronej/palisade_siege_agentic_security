@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from palisade.config import PalisadeSettings
 from palisade.gates.g5_hpc import (
     ALLOCATION_POLICY_FILENAME,
@@ -176,7 +176,7 @@ def test_unreadable_path_uses_defaults_and_warns(
 
 
 def _project() -> HostProject:
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(), name="g5-policy", description=None, system_prompt=None,
         skills=[], knowledge_bases=[], tools=[], usage_limits={},
     )

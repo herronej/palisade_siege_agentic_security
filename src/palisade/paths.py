@@ -1,63 +1,69 @@
-"""Filesystem anchors for the PALISADE/SIEGE artifact.
+"""Filesystem anchors for the PALISADE runtime.
 
-Every anchor is found by walking up to the repository marker rather than by
-counting parent directories, so the checkout can be relocated, vendored or
-installed without silently repointing the analysis modules at nothing.
+PALISADE ships as a dependency of a host application, so this module must
+import cleanly from ``site-packages`` where there is no repository around it.
+Only anchors that survive that live here:
 
-The analysis modules under ``tools/`` read the corpus and write their reports
-through these constants; see ``docs/palisade/README.md`` for the map from a
-reported number to the module that produces it.
+``PALISADE_DIR``
+    The installed package directory. Always valid. Gate code resolves its
+    bundled assets (jailbreak signatures, the Semgrep ruleset) relative to
+    this, not to a checkout.
+
+``find_repo_root`` / ``require_repo_root``
+    A checkout root, when there is one. The benchmark and the analysis
+    modules need it and are only ever run from a checkout; the runtime does
+    not. ``find_repo_root`` returns ``None`` rather than raising, so nothing
+    breaks at import time for an installed deployment.
+
+The corpus, control and report anchors live in :mod:`siege.paths`, which is
+free to require a checkout because SIEGE is not a runtime dependency.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-_MARKERS = ("pyproject.toml", "src")
+PALISADE_DIR = Path(__file__).resolve().parent
+"""The installed ``palisade`` package directory."""
+
+# The artifact root, distinctively. `pyproject.toml` alone is not enough: the
+# repository is a uv workspace, so a member directory (siege/) carries one too
+# and a walk upward would stop there. `tools/` and `docs/` exist only at the
+# root, and both are load-bearing for the analysis modules that call this.
+_MARKERS = ("pyproject.toml", "tools", "docs")
 
 
-def _find_repo_root(start: Path) -> Path:
-    for candidate in (start, *start.parents):
+def find_repo_root(start: Path | None = None) -> Path | None:
+    """The checkout root above ``start``, or ``None`` when installed.
+
+    Found by walking up to the repository markers rather than by counting
+    parent directories, so a checkout can be relocated or vendored without
+    silently repointing anything at the wrong tree.
+    """
+    origin = (start or PALISADE_DIR).resolve()
+    for candidate in (origin, *origin.parents):
         if all((candidate / m).exists() for m in _MARKERS):
             return candidate
-    raise RuntimeError(
-        f"could not locate the repository root above {start}: expected a "
-        f"directory containing {' and '.join(_MARKERS)}"
-    )
+    return None
 
 
-REPO_ROOT = _find_repo_root(Path(__file__).resolve())
-"""Root of the artifact checkout."""
+def require_repo_root(start: Path | None = None) -> Path:
+    """The checkout root, or a clear error naming why there isn't one.
 
-SRC_DIR = REPO_ROOT / "src"
-PALISADE_DIR = SRC_DIR / "palisade"
-SIEGE_DIR = SRC_DIR / "siege"
+    For callers that genuinely need the repository — the benchmark, the
+    analysis modules, the operator CLIs run from a clone. Runtime code must
+    not call this: PALISADE is installed as a library into host applications
+    that have no PALISADE checkout.
+    """
+    root = find_repo_root(start)
+    if root is None:
+        raise RuntimeError(
+            f"no PALISADE checkout above {(start or PALISADE_DIR).resolve()}. "
+            f"This code path needs the repository (corpus, reports, or "
+            f"operator policy files) and PALISADE appears to be installed as "
+            f"a library instead. Run it from a clone of the artifact."
+        )
+    return root
 
-CORPUS_DIR = SIEGE_DIR / "corpus"
-"""SIEGE-S: 42 attack classes (205 instances) plus the 181-task benign
-control, which lives here as two further directories -- ``benign_workload``
-(the deployment's own 24-task example workload) and ``benign_diverse`` (the
-157-task near-manifold set). One directory is one class; one file is one
-instance."""
 
-CONTROLS_DIR = SIEGE_DIR / "controls"
-"""Targeted controls added beyond the 181-task benign set: the
-provenance-carrying benign control and the expanded citation-grounding
-control. These are *not* part of the 181 and are not in any reported FPR."""
-
-DOCS_DIR = REPO_ROOT / "docs" / "palisade"
-"""Where the analysis modules write their Markdown reports."""
-
-CONTRACTS_DIR = REPO_ROOT / "palisade_contracts"
-"""Operator contract directory, loaded beside the built-in contract library."""
-
-__all__ = [
-    "REPO_ROOT",
-    "SRC_DIR",
-    "PALISADE_DIR",
-    "SIEGE_DIR",
-    "CORPUS_DIR",
-    "CONTROLS_DIR",
-    "DOCS_DIR",
-    "CONTRACTS_DIR",
-]
+__all__ = ["PALISADE_DIR", "find_repo_root", "require_repo_root"]

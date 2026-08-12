@@ -35,7 +35,7 @@ are pinned in `uv.lock`; `pyproject.toml` pins the direct ones too, because
 `pydantic-ai>=1.90` floats to a 2.x that removes an API G2 depends on.
 
 ```bash
-uv sync --extra repro
+uv sync
 uv run pytest
 ```
 
@@ -173,6 +173,6 @@ offline.
   reproduces without network access.
 - **MSTDB-TP is not shipped.** The reference-value contract round-trips cited
   values against it; without it those checks run against the surrogate tables
-  under `src/siege/oracles/ground_truth_tables/`. Tolerances are **not**
+  under `siege/src/siege/oracles/ground_truth_tables/`. Tolerances are **not**
   domain-scientist signed, so the paper reports contract *coverage*, not ground
   truth — and so should a reproduction.

@@ -40,7 +40,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.tools import ToolDefinition
 
-from palisade.host import HostProject
+from palisade.host import HostProjectModel
 from palisade.capabilities import CapabilityRegistry, G3RagCapability, SensitivityTier
 from palisade.config import PalisadeSettings
 from palisade.gates.base import GateContext
@@ -141,7 +141,7 @@ def _format_rag_result(
 
 
 def _make_project(name: str = "test-project") -> HostProject:
-    return HostProject(
+    return HostProjectModel(
         id=uuid.uuid4(),
         name=name,
         description=None,
