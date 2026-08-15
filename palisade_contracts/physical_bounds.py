@@ -19,7 +19,7 @@ Operator-supplied contract for ``settings.contracts_dir`` -- loaded by
 from __future__ import annotations
 
 from palisade.contracts.base import Contract, ContractResult, register
-from siege.oracles import ground_truth as gt
+from palisade import ground_truth as gt
 
 # Claim ``type`` -> canonical property key in the absolute-bounds table.
 _PROPERTY_ALIASES = {

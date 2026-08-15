@@ -19,7 +19,7 @@ Operator-supplied contract for ``settings.contracts_dir``.
 from __future__ import annotations
 
 from palisade.contracts.base import Contract, ContractResult, register
-from siege.oracles import ground_truth as gt
+from palisade import ground_truth as gt
 
 _PROPERTY_ALIASES = {
     "density": "density",
