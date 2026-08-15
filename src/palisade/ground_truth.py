@@ -1,5 +1,5 @@
 """
-Ground-truth tables for the SIEGE correctness oracle (WI11).
+Reference tables for the deployed contract library.
 
 Loads the surrogate JSON tables under ``ground_truth_tables/`` and exposes
 a small, dependency-free lookup API. The WI11 correctness contracts (in
@@ -8,7 +8,12 @@ a claimed value / citation / unit conversion is consistent with the
 recorded ground truth.
 
 This module imports **nothing** from ``palisade.contracts`` so the
-external contracts can import it freely without an import cycle.
+external operator contracts can import it freely without an import cycle.
+
+It lives in the sidecar rather than the benchmark because the *deployed*
+contract library reads it: a host installing PALISADE alone still needs the
+reference-value contract to resolve. SIEGE's correctness oracle reads it too,
+via the same module.
 
 > **Surrogate-stub.** The values here are plausibility-band central
 > values, not certified MSTDB-TP data. A curated,

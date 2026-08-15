@@ -12,7 +12,7 @@ Public surface:
 
 from __future__ import annotations
 
-from siege.oracles import ground_truth
+from palisade import ground_truth
 from siege.oracles.correctness_oracle import (
     CorrectnessOracle,
     OracleVerdict,

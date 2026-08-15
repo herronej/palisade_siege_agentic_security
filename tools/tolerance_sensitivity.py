@@ -56,7 +56,7 @@ from pathlib import Path
 
 from palisade.contracts.base import UNTRUSTED_KEY
 from siege.instance_loader import load_instances
-from siege.oracles import ground_truth as gt
+from palisade import ground_truth as gt
 from siege.oracles.correctness_oracle import (
     CorrectnessOracle,
     extract_instance_claims,

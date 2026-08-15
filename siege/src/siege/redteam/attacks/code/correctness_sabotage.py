@@ -38,7 +38,7 @@ from typing import TYPE_CHECKING
 from siege.redteam.attacker import StaticAttacker
 from siege.redteam.env import Artifact
 from siege.oracles import CorrectnessOracle
-from siege.oracles.ground_truth import mstdb_value, physical_constant
+from palisade.ground_truth import mstdb_value, physical_constant
 from siege.redteam.attacks.common import ALL_TIERS, TierCurves, evaluate_attack
 
 if TYPE_CHECKING:

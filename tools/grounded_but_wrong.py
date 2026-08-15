@@ -46,7 +46,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from palisade.contracts.base import UNTRUSTED_KEY
-from siege.oracles import ground_truth as gt
+from palisade import ground_truth as gt
 from siege.oracles.correctness_oracle import CorrectnessOracle
 from siege.paths import REPO_ROOT
 

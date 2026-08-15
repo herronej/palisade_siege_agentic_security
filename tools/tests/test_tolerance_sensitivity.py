@@ -6,7 +6,7 @@ sweep: the monotonicity and population contracts. Fully offline/deterministic
 
 from __future__ import annotations
 
-from siege.oracles import ground_truth as gt
+from palisade import ground_truth as gt
 from siege.oracles.correctness_oracle import CorrectnessOracle
 from tools.tolerance_sensitivity import (
     _b3_3_attack_claims,
