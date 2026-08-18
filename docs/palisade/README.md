@@ -90,6 +90,7 @@ containerized controller under `docker/slurm/`.
 | XC.1's `create_file` sink carries no capability field | `tools.taint_coverage` | `taint_coverage.md` | offline |
 | 55 of 181 benign controls reach a sink; 54 carry an unresolvable argument | `tools.taint_interlock` | `taint_interlock.md` | offline |
 | The remediation's cost is unpriced on this corpus | `tools.taint_interlock` | `taint_interlock.md` | offline |
+| What that remediation actually costs on legitimate retrieve-then-act work (132-session provenance control) | `tools.failclosed_provenance` | `failclosed_provenance.md` | offline |
 | AgentDojo bounds that rule's cost at 17% | `tools.agentdojo_e1` | `agentdojo_e1.md` | served |
 
 ### V-E Adaptive attacks (Table I)
@@ -102,6 +103,7 @@ containerized controller under `docker/slurm/`.
 | Budget-curve figure | `tools.budget_curve_figure` | `figures/` | offline |
 | Adaptive ablation across configurations | `tools.adaptive_ablation` | `adaptive_ablation.md` | served |
 | Propagation-search adversary (not scored in Table I) | `tools.taint_search` | `taint_search.md` | served |
+| Ceiling on what propagation-by-reference (opaque handles) could close | `tools.handle_coverage` | `handle_coverage.md` | offline |
 | Adaptive scheduler-injection adversary vs. live G5 | `tools.g5_search` | `g5_search.md` | served |
 | Adaptive taint-clearing via slow-tier sanitization | `tools.sanitize_search` | `sanitize_search.md` | served |
 

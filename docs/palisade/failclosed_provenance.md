@@ -1,3 +1,5 @@
+<!-- Generated report. Source module: tools.failclosed_provenance. Regenerate with `uv run python -m tools.failclosed_provenance`. -->
+
 # `full +failclosed` against the 132-session provenance control
 
 `full +failclosed` denies a high-stakes sink whose argument resolves to *no* registered label while untrusted taint is live in the session (`g2_fail_closed_unlabeled`). It was scored only against the 205/181 corpus, where its benign cost reads 0/181 -- a number produced by the absence of the workload, since no benign corpus instance chains a retrieval into a sink. The 132-session provenance control is the instrument that can price it. Taint bound `production`, fast tier, interlock `off`.

@@ -278,6 +278,13 @@ def _reuses(sink_text: str, retrieved: str) -> bool:
 
 def to_markdown(attacks: list[AttackVerdict], benigns: list[BenignVerdict]) -> str:
     L: list[str] = []
+    # Provenance banner: the result map requires every shipped report to
+    # name the module that regenerates it, so it is emitted here rather
+    # than added to the file by hand where a re-run would wipe it.
+    L.append(
+        "<!-- Generated report. Source module: tools.handle_coverage. "
+        "Regenerate with `uv run python -m tools.handle_coverage`. -->\n"
+    )
     L.append("# Handle coverage: what propagation-by-reference could reach\n")
     L.append(
         "A static classification over declared corpus structure, **not** a live "

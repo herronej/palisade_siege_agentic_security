@@ -112,6 +112,13 @@ async def _measure(cfg, bound: str) -> ConfigResult:
 
 def to_markdown(base: ConfigResult, fc: ConfigResult, bound: str) -> str:
     L: list[str] = []
+    # Provenance banner: the result map requires every shipped report to
+    # name the module that regenerates it, so it is emitted here rather
+    # than added to the file by hand where a re-run would wipe it.
+    L.append(
+        "<!-- Generated report. Source module: tools.failclosed_provenance. "
+        "Regenerate with `uv run python -m tools.failclosed_provenance`. -->\n"
+    )
     L.append("# `full +failclosed` against the 132-session provenance control\n")
     L.append(
         "`full +failclosed` denies a high-stakes sink whose argument resolves "

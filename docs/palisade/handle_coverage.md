@@ -1,3 +1,5 @@
+<!-- Generated report. Source module: tools.handle_coverage. Regenerate with `uv run python -m tools.handle_coverage`. -->
+
 # Handle coverage: what propagation-by-reference could reach
 
 A static classification over declared corpus structure, **not** a live run of a handle implementation. It bounds what such a regime could close; it does not show that one does. Every number is a ceiling.
