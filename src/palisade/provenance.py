@@ -354,6 +354,7 @@ class ProvenanceEmitter:
         context: GateContext | None = None,
         *,
         tier: str | None = None,
+        duration_ms: float | None = None,
     ) -> ProvenanceEvent | None:
         """
         Record a gate's `GateDecision` for audit.
@@ -391,6 +392,11 @@ class ProvenanceEmitter:
         }
         if tier is not None:
             payload["tier"] = tier
+        if duration_ms is not None:
+            # Wall time of the check that produced this decision. Present only
+            # when a host injected a gate recorder that was active, so an
+            # uninstrumented deployment's audit events are unchanged.
+            payload["duration_ms"] = duration_ms
         if decision.capability_tag is not None:
             payload["capability_tag"] = _capability_tag_to_dict(
                 decision.capability_tag

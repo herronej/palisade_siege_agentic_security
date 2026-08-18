@@ -40,8 +40,12 @@ classifiers = [
 # produced against; `pydantic-ai>=1.90` in particular floats to a 2.x that
 # removes `MCPServerStreamableHTTP`, which G2's descriptor pinning depends on.
 dependencies = [
-    "pydantic-ai==1.90.0",
-    "pydantic-ai-shields==0.3.2",
+    # `<2` is the real constraint, not the exact version: pydantic-ai 2.x
+    # removes `MCPServerStreamableHTTP`, which G2's descriptor pinning needs.
+    # Pinning it exactly was over-tight and made PALISADE uninstallable
+    # alongside a host that requires a newer 1.x.
+    "pydantic-ai>=1.90,<2",
+    "pydantic-ai-shields>=0.3.2,<0.4",
     "pydantic-settings==2.14.0",
     "python-dotenv==1.2.2",
     "pyyaml==6.0.3",

@@ -3,11 +3,13 @@ Gate ABC and decision/context dataclasses for PALISADE.
 
 """
 
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import logging
 from typing import Any
 
+from palisade.instrumentation import get_gate_recorder
 from palisade.capabilities import CapabilityRegistry, CapabilityTag
 from palisade.trust import TrustScorer
 
@@ -111,8 +113,19 @@ class Gate(ABC):
                 allow=True,
                 reason=f"gate {self.name} disabled",
             )
+        # Every gate's tiers run through this dispatch, so it is the single
+        # probe point for G1..G6. An inactive recorder takes no clock reading
+        # and the behaviour is byte-identical to an uninstrumented build.
+        recorder = get_gate_recorder()
+        started = time.monotonic() if recorder.active("perf", "gate_timing") else None
         decision = await self._check_fast_when_enabled(payload, ctx)
-        self._emit_decision(ctx, decision, tier="fast")
+        duration_ms = (time.monotonic() - started) * 1000 if started is not None else None
+        if duration_ms is not None:
+            recorder.gate(
+                gate=self.name, tier="fast",
+                duration_ms=duration_ms, allow=decision.allow,
+            )
+        self._emit_decision(ctx, decision, tier="fast", duration_ms=duration_ms)
         return decision
 
     async def check_slow(
@@ -127,6 +140,8 @@ class Gate(ABC):
         """
         if not self.enabled:
             return decision
+        recorder = get_gate_recorder()
+        started = time.monotonic() if recorder.active("perf", "gate_timing") else None
         # The Q-LLM slow tier runs only when a quarantine agent is wired;
         # the contract-registry check needs no model, so it runs whenever
         # the gate is enabled.
@@ -137,7 +152,13 @@ class Gate(ABC):
         # its network call; it can only tighten a decision, so order does not
         # change the verdict, only the cost.
         decision = self._apply_judge_check(payload, ctx, decision)
-        self._emit_decision(ctx, decision, tier="slow")
+        duration_ms = (time.monotonic() - started) * 1000 if started is not None else None
+        if duration_ms is not None:
+            recorder.gate(
+                gate=self.name, tier="slow",
+                duration_ms=duration_ms, allow=decision.allow,
+            )
+        self._emit_decision(ctx, decision, tier="slow", duration_ms=duration_ms)
         return decision
 
     # -----------------------------------------------------------------
@@ -145,7 +166,12 @@ class Gate(ABC):
     # -----------------------------------------------------------------
 
     def _emit_decision(
-        self, ctx: GateContext, decision: GateDecision, *, tier: str
+        self,
+        ctx: GateContext,
+        decision: GateDecision,
+        *,
+        tier: str,
+        duration_ms: float | None = None,
     ) -> None:
         """Emit a gate decision to the provenance bus when one is wired.
 
@@ -161,7 +187,9 @@ class Gate(ABC):
         if provenance is None:
             return
         try:
-            provenance.emit_gate_decision(self.name, decision, ctx, tier=tier)
+            provenance.emit_gate_decision(
+                self.name, decision, ctx, tier=tier, duration_ms=duration_ms
+            )
         except Exception: # noqa: BLE001 - provenance must not break a gate
             logger.debug(
                 "PALISADE: gate %s provenance emission failed", self.name,
