@@ -338,14 +338,16 @@ class LlmJudgeDetector:
     def __init__(
         self,
         *,
-        model: str = "gpt-oss-120b",
+        model: str | None = None,
         base_url: str | None = None,
         api_key: str | None = None,
         timeout: float = 90.0,
         retries: int = 3,
     ) -> None:
+        from siege.served import served_model_name
+
         self.name = "llm-judge"
-        self._model = model
+        self._model = model or served_model_name()
         base = (base_url or os.environ.get("OPENAI_BASE_URL", "")).rstrip("/")
         # Callers configure this variable for two different clients: some
         # SDKs want the ``/v1`` suffix, this raw endpoint appends its own.
@@ -404,21 +406,32 @@ class LlmJudgeDetector:
         import urllib.error
         import urllib.request
 
-        body = json.dumps(
-            {
-                "model": self._model,
-                "messages": [
-                    {"role": "system", "content": _JUDGE_SYSTEM},
-                    {"role": "user", "content": f"INPUT:\n{text}"},
-                ],
-                "temperature": 0.0,
-                # gpt-oss-120b is a reasoning model: a small budget is
-                # consumed entirely by reasoning_content and `content`
-                # comes back empty with finish_reason="length", which
-                # silently scores every input BENIGN.
-                "max_tokens": 512,
-            }
-        ).encode()
+        from siege.served import (
+            EndpointRefused,
+            is_openrouter,
+            provider_routing,
+            refusal_reason_for_status,
+        )
+
+        request_body = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": _JUDGE_SYSTEM},
+                {"role": "user", "content": f"INPUT:\n{text}"},
+            ],
+            "temperature": 0.0,
+            # gpt-oss-120b is a reasoning model: a small budget is
+            # consumed entirely by reasoning_content and `content`
+            # comes back empty with finish_reason="length", which
+            # silently scores every input BENIGN.
+            "max_tokens": 512,
+        }
+        # This client bypasses the OpenAI SDK, so it applies the OpenRouter
+        # provider pin (siege.served) itself.
+        routing = provider_routing() if is_openrouter(self._base) else None
+        if routing is not None:
+            request_body["provider"] = routing
+        body = json.dumps(request_body).encode()
         req = urllib.request.Request(
             f"{self._base}/v1/chat/completions",
             data=body,
@@ -435,6 +448,16 @@ class LlmJudgeDetector:
                 with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                     payload = json.loads(resp.read())
                 break
+            except urllib.error.HTTPError as exc:
+                # No credit, a bad key or no serving host would otherwise be
+                # scored as "not flagged" for the rest of the run.
+                detail = exc.read().decode("utf-8", "replace")[:300]
+                reason = refusal_reason_for_status(exc.code, detail)
+                if reason:
+                    raise EndpointRefused(f"{reason}: {detail}") from exc
+                if attempt + 1 >= self._retries:
+                    return None
+                time.sleep(2.0 * (attempt + 1))
             except Exception:
                 if attempt + 1 >= self._retries:
                     return None

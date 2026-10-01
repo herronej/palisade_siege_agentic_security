@@ -38,7 +38,7 @@ plus the :class:`AllocationPolicy` schema both later issues build on.
    directive, an ``export SLURM_PROLOG=`` / ``LD_PRELOAD=`` in the body,
    or a ``$(...)`` / backtick substitution in any directive value smuggles
    execution into the job lifecycle outside the inspected body ->
-   **SEV1** deny.
+   **SEV1** deny by default, at ``g5_lifecycle_hook_severity``.
 
 In addition to the allow-/deny-list checks, the fast tier denies
 **opaque code execution** (SEV2): decoding embedded content straight
@@ -70,6 +70,7 @@ from pathlib import Path
 from typing import Any
 
 from palisade.capabilities import CapabilityTag, DualUseMarker
+from palisade.capabilities.scheduler_fields import scheduler_field_violation
 from palisade.quarantine import (
     HIGH_STAKES_CODE_CATEGORIES,
     CodeIntentExtraction,
@@ -101,6 +102,7 @@ logger = logging.getLogger(__name__)
 
 _SEV1 = 1
 _SEV2 = 2
+_SEV3 = 3
 
 
 # -----------------------------------------------------------------
@@ -110,7 +112,8 @@ _SEV2 = 2
 # #SBATCH directives that name a script the scheduler runs around the job
 # (prolog / epilog). An agent-generated job has no legitimate need to set
 # these, and they smuggle arbitrary execution into the job lifecycle --
-# outside the script body G4/G5 inspect. Match -> SEV1 deny.
+# outside the script body G4/G5 inspect. Match -> deny at
+# ``g5_lifecycle_hook_severity`` (SEV1 by default).
 _LIFECYCLE_HOOK_DIRECTIVES: frozenset[str] = frozenset(
     {"prolog", "epilog", "prologslurmctld", "epilogslurmctld"}
 )
@@ -461,8 +464,30 @@ class G5HpcJobGate(Gate):
         dag_max_nodes: int = _DEFAULT_DAG_MAX_NODES,
         contract_registry: ContractRegistry | None = None,
         slow_tier_fail_open: bool = False,
+        lifecycle_hook_enabled: bool = True,
+        lifecycle_hook_severity: int = _SEV1,
+        scheduler_field_rule: bool = True,
     ) -> None:
         super().__init__(enabled=enabled)
+        # Closed-vocabulary scheduler-field rule: an enumerated submission field
+        # (qos/partition/reservation/...) whose value an untrusted source
+        # proposed is a flow the containment taint walk cannot see, because the
+        # copied token is too short to carry a distinctive substring (`b5_11`).
+        # The primitive lives in ``capabilities.scheduler_fields``; enforcing it
+        # in this deployed gate is what the SIEGE production bound scores, now
+        # applied at the sink itself rather than only by the mediation layer.
+        self._scheduler_field_rule = bool(scheduler_field_rule)
+        self._lifecycle_hook_enabled = bool(lifecycle_hook_enabled)
+        # Severity for the lifecycle-hook denial. The check is fixed; where its
+        # denial lands in the incident playbook is the knob -- SEV1 terminates
+        # the session irrecoverably, SEV2 floors and forces re-authentication.
+        # See ``PalisadeSettings.g5_lifecycle_hook_severity``.
+        if lifecycle_hook_severity not in (_SEV1, _SEV2, _SEV3):
+            raise ValueError(
+                f"lifecycle_hook_severity must be one of "
+                f"{{{_SEV1}, {_SEV2}, {_SEV3}}}, got {lifecycle_hook_severity!r}"
+            )
+        self._lifecycle_hook_severity = int(lifecycle_hook_severity)
         # The fast-tier allocation / resource-ceiling / path-scoping
         # checks are DSL contracts consulted through the registry. Default
         # to the builtin library (idempotent load) when none is injected.
@@ -587,6 +612,21 @@ class G5HpcJobGate(Gate):
                 ),
                 incident_level=_SEV2,
             )
+
+        # Scheduler-field provenance: an enumerated field an untrusted source
+        # proposed cannot be recovered by the containment taint walk (the value
+        # is a short closed-vocabulary token), so it is checked positionally
+        # here, reading the parsed directive so quote-normalization cannot hide
+        # it. Registry-driven, so it is silent when no untrusted source proposed
+        # the field -- benign user-driven submissions are unaffected.
+        if self._scheduler_field_rule:
+            field_hit = scheduler_field_violation(slurm_script, ctx.capability_registry)
+            if field_hit is not None:
+                return GateDecision(
+                    allow=False,
+                    reason=f"G5 {field_hit}",
+                    incident_level=_SEV2,
+                )
 
         deny = self._run_fast_checks(script, user_config)
         if deny is not None:
@@ -1024,6 +1064,8 @@ class G5HpcJobGate(Gate):
     def _check_lifecycle_hooks(
         self, script: SlurmScript, user_config: Mapping[str, Any]
     ) -> GateDecision | None:
+        if not self._lifecycle_hook_enabled:
+            return None
         # (a) #SBATCH prolog/epilog directives -- a scheduler-run hook script
         #     outside the inspected body -- or a shell command substitution in
         #     *any* directive value (#SBATCH lines are static config; $(...)
@@ -1039,7 +1081,7 @@ class G5HpcJobGate(Gate):
                         f"runs an attacker-controlled script in the job "
                         f"lifecycle, outside the body G4/G5 inspect"
                     ),
-                    incident_level=_SEV1,
+                    incident_level=self._lifecycle_hook_severity,
                     capability_tag=_sticky_tag(
                         "lifecycle_hook", {"directive": normalized}
                     ),
@@ -1051,7 +1093,7 @@ class G5HpcJobGate(Gate):
                         f"G5 directive command substitution: #SBATCH "
                         f"--{normalized} value contains a shell substitution"
                     ),
-                    incident_level=_SEV1,
+                    incident_level=self._lifecycle_hook_severity,
                     capability_tag=_sticky_tag(
                         "directive_substitution", {"directive": normalized}
                     ),
@@ -1066,7 +1108,7 @@ class G5HpcJobGate(Gate):
                         f"G5 lifecycle-hook injection: script sets {pat}, "
                         f"redirecting the job lifecycle or preloading a library"
                     ),
-                    incident_level=_SEV1,
+                    incident_level=self._lifecycle_hook_severity,
                     capability_tag=_sticky_tag("lifecycle_env", {"env": pat}),
                 )
         return None

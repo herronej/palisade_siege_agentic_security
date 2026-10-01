@@ -104,8 +104,10 @@ _DEFAULT_INTENT_CONFIDENCE_THRESHOLD: float = 0.5
 # SEV1 in the playbook terminates the session.
 _DEFAULT_DUAL_USE_SEV1_CONFIDENCE: float = 0.7
 
-# Deterministic dual-use weaponization denylist (always-on; complements the
-# Q-LLM slow tier, which is off unless quarantine is enabled). These target
+# Deterministic dual-use weaponization denylist (on by default, and a posture
+# knob -- see ``PalisadeSettings.g1_weaponization_signature_enabled``;
+# complements the Q-LLM slow tier, which is off unless quarantine is enabled
+# and is the only other check screening for this property). These target
 # *weapons-design / weapons-grade* phrasing ONLY -- never VISTA's legitimate
 # domain (tritium breeding, uranium / fluoride fuel chemistry, enrichment for
 # reactor fuel, UF4 / UF3, criticality for reactor physics), all of which must
@@ -485,8 +487,15 @@ class G1PromptGate(Gate):
         intent_dual_use_sev1_confidence: float = _DEFAULT_DUAL_USE_SEV1_CONFIDENCE,
         intent_self_consistency_samples: int = 1,
         slow_tier_fail_open: bool = False,
+        weaponization_signature_enabled: bool = True,
     ) -> None:
         super().__init__(enabled=enabled)
+        # The deterministic weaponization denylist is a tunable posture knob,
+        # not a fixed part of the fast tier; see
+        # ``PalisadeSettings.g1_weaponization_signature_enabled``.
+        self._weaponization_signature_enabled = bool(
+            weaponization_signature_enabled
+        )
         self._jailbreak_patterns: tuple[re.Pattern[str],...] = (
             jailbreak_patterns
             if jailbreak_patterns is not None
@@ -627,7 +636,8 @@ class G1PromptGate(Gate):
                 incident_level=2,
             )
 
-        # ----- 2b. Dual-use weaponization (deterministic, always-on) --
+        # ----- 2b. Dual-use weaponization (deterministic; on by default,
+        #           disabled by g1_weaponization_signature_enabled=False) --
         weapon = self._match_weaponization(user_prompt)
         if weapon is not None:
             return GateDecision(
@@ -785,7 +795,12 @@ class G1PromptGate(Gate):
         """Deterministic dual-use weapons-design / weapons-grade match
         (pure). Domain science (tritium, fuel-salt chemistry, enrichment for
         fuel) does not match; see ``_WEAPONIZATION_PATTERNS``. Scans the raw
-        prompt and its de-obfuscated views (see `normalize_for_detection`)."""
+        prompt and its de-obfuscated views (see `normalize_for_detection`).
+
+        Returns None unconditionally when the signature is disabled, so the
+        posture holds at every call site rather than at the one below."""
+        if not self._weaponization_signature_enabled:
+            return None
         for candidate in (text, *normalize_for_detection(text)):
             for pattern in _WEAPONIZATION_PATTERNS:
                 if pattern.search(candidate):

@@ -341,3 +341,30 @@ def test_hard_win_capable_templates_cover_the_whole_capable_set():
         # Every capable instance must be optimizable, or the scored set silently
         # shrinks below the capable set again.
         assert all(_prepare(i) is not None for i in selected), template
+
+
+def test_multiseed_report_names_the_posture_and_the_attacker(monkeypatch) -> None:
+    """E2 and E3 reports must not read as the `full` run, and E3's attacker is
+    whatever --model named, not the environment's default model."""
+    from siege.ablation_matrix import RECOMMENDED_CONFIG
+    from tools.optimizer_hardwin import _multiseed_md
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
+    monkeypatch.setenv("SIEGE_SERVED_MODEL", "openai/gpt-oss-120b")
+    monkeypatch.setenv("SIEGE_OPENROUTER_PROVIDERS", "deepinfra/fp8")
+    rep = MultiSeedReport(
+        strategy="pair", budget=12, tier="black_box",
+        model="qwen/qwen3-235b-a22b-2507",
+        scored_n=2, declarative_hard_n=0, authored_hard_n=0,
+        blocked_ids=("a", "b"), scored_ids=("a", "b"),
+        seeds=(SeedResult(0, ("a",), FallbackCounter()),),
+    )
+    md = _multiseed_md([rep], None, RECOMMENDED_CONFIG,
+                       "uv run python -m tools.optimizer_hardwin --posture recommended")
+    assert "Source module: tools.optimizer_hardwin" in md[:400]
+    assert "--posture recommended" in md[:400]
+    assert "_Condition searched: **recommended posture" in md
+    assert "attacker `qwen/qwen3-235b-a22b-2507`" in md
+    assert "openai/gpt-oss-120b" not in md
+    assert "deepinfra/fp8" in md
+    assert "**full PALISADE**" in _multiseed_md([rep], None)

@@ -10,11 +10,8 @@ configuration measured against the LLM judge as-shipped, and toggling those
 families should trace an operating curve, not a point.
 
 This tool makes each family a real knob and measures the curve. For each subset
-of the three families it disables the exact deterministic check that fires
-(the ``_check_lifecycle_hooks`` / ``_match_weaponization`` methods and the
-``match_db_authority_spoof`` predicate, patched at *both* its binding sites --
-the G3 gate fast tier and the production capability scan), then reports two
-numbers on the same configuration:
+of the three families it disables the exact deterministic check that fires,
+then reports two numbers on the same configuration:
 
 * **benign FPR** over the 181-task control (the axis the knob is tuned on), with
   an exact-binomial 95% CI; and
@@ -28,9 +25,15 @@ measured points from ``detector_panel_r4.md`` / ``judge_adaptive_r4.md``; the
 judge FPR is reported as the **range** its temperature-zero repetitions produced
 (``2--4 of 181``), not the single best value, per R1-S3.
 
+Two of the three families are real configuration: ``lifecycle`` and
+``weaponization`` are ``AblationConfig`` fields threaded into the gate
+constructors, so a point on this curve is a posture a deployment can select and
+a search driver can be pointed at. ``db_authority`` is a module-level predicate
+with two binding sites -- the G3 gate fast tier and the production capability
+scan -- and is still disabled by a process-local patch, restored on exit.
+
 Everything here is deterministic and offline (no served model), so the curve is
-fully reproducible. The signature patches are process-local and restored on exit;
-production code is untouched.
+fully reproducible.
 
     cd backend
     uv run python -m tools.fpr_curve
@@ -42,13 +45,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from palisade.capabilities import g3_rag as cap_g3
-from palisade.gates import g1_prompt, g3_rag, g5_hpc
+from palisade.gates import g3_rag
 from siege import SessionRunner, load_instances
-from siege.ablation_matrix import CUMULATIVE_CONFIGS
+from siege.ablation_matrix import CUMULATIVE_CONFIGS, AblationConfig
 from siege.corpus_builder import CORPUS_DIR
 from siege.scorer import score_trace
 from tools.benign_fpr import clopper_pearson, measure_benign_fpr
@@ -59,6 +62,7 @@ __all__ = [
     "CurvePoint",
     "Comparator",
     "COMPARATORS",
+    "config_for",
     "disabled_signatures",
     "run_fpr_curve",
     "to_markdown",
@@ -78,26 +82,39 @@ SIGNATURES: dict[str, tuple[str, int]] = {
 SIGNATURE_ORDER: tuple[str, ...] = ("lifecycle", "weaponization", "db_authority")
 
 
+def config_for(sigs: frozenset[str]) -> AblationConfig:
+    """The fast-tier ``full`` config with the named signature families off.
+
+    ``lifecycle`` and ``weaponization`` are posture fields on the config, so
+    both measurements below see the same selectable configuration rather than a
+    patched process. ``db_authority`` has no config field and is handled by
+    ``disabled_signatures``.
+    """
+    unknown = sigs - set(SIGNATURES)
+    if unknown:
+        raise ValueError(f"unknown signatures: {sorted(unknown)}")
+    return replace(
+        _FAST_FULL,
+        name=_FAST_FULL.name + ("" if not sigs else " -" + "-".join(sorted(sigs))),
+        g5_lifecycle_hook="lifecycle" not in sigs,
+        g1_weaponization_signature="weaponization" not in sigs,
+    )
+
+
 @contextlib.contextmanager
 def disabled_signatures(sigs: frozenset[str]):
-    """Process-locally disable the named conservative signatures, then restore.
+    """Process-locally disable the one family that is not a config field.
 
-    Each family maps to the one deterministic check that produces its false
-    block. ``db_authority`` is patched at both binding sites -- the G3 gate fast
-    tier (``gates.g3_rag``) and the production capability scan
-    (``capabilities.g3_rag``) -- because disabling it must hold on both the FPR
-    (fast tier) and the hard-win (production bound) measurements.
+    ``db_authority`` is a module-level predicate patched at both binding sites
+    -- the G3 gate fast tier (``gates.g3_rag``) and the production capability
+    scan (``capabilities.g3_rag``) -- because disabling it must hold on both the
+    FPR (fast tier) and the hard-win (production bound) measurements. The other
+    two families are configuration; see ``config_for``.
     """
     unknown = sigs - set(SIGNATURES)
     if unknown:
         raise ValueError(f"unknown signatures: {sorted(unknown)}")
     saved: dict[str, Any] = {}
-    if "lifecycle" in sigs:
-        saved["lifecycle"] = g5_hpc.G5HpcJobGate._check_lifecycle_hooks
-        g5_hpc.G5HpcJobGate._check_lifecycle_hooks = lambda self, script, user_config: None
-    if "weaponization" in sigs:
-        saved["weaponization"] = g1_prompt.G1PromptGate._match_weaponization
-        g1_prompt.G1PromptGate._match_weaponization = lambda self, text: None
     if "db_authority" in sigs:
         saved["db_gate"] = g3_rag.match_db_authority_spoof
         saved["db_cap"] = cap_g3.match_db_authority_spoof
@@ -106,25 +123,25 @@ def disabled_signatures(sigs: frozenset[str]):
     try:
         yield
     finally:
-        if "lifecycle" in saved:
-            g5_hpc.G5HpcJobGate._check_lifecycle_hooks = saved["lifecycle"]
-        if "weaponization" in saved:
-            g1_prompt.G1PromptGate._match_weaponization = saved["weaponization"]
         if "db_gate" in saved:
             g3_rag.match_db_authority_spoof = saved["db_gate"]
             cap_g3.match_db_authority_spoof = saved["db_cap"]
 
 
-async def _benign_fpr() -> tuple[int, int, float, tuple[float, float]]:
-    report = await measure_benign_fpr(config=_FAST_FULL)
+async def _benign_fpr(
+    config: AblationConfig,
+) -> tuple[int, int, float, tuple[float, float]]:
+    report = await measure_benign_fpr(config=config)
     return report.pooled()  # (k, n, fpr, (lo, hi))
 
 
-async def _deployed_hardwins(bound: str = "production") -> tuple[int, int, list[str]]:
+async def _deployed_hardwins(
+    config: AblationConfig, bound: str = "production"
+) -> tuple[int, int, list[str]]:
     """Deployed hard-win count over the 205-instance attack corpus.
 
-    Runs each attack instance through the fast-tier ``full`` stack under the
-    given taint ``bound`` and counts scorer-detected hard wins. Returns
+    Runs each attack instance through the given fast-tier ``full`` config under
+    the given taint ``bound`` and counts scorer-detected hard wins. Returns
     ``(count, n, ids)``.
     """
     runner = SessionRunner(bound=bound)
@@ -134,7 +151,7 @@ async def _deployed_hardwins(bound: str = "production") -> tuple[int, int, list[
         if not inst.is_attack:
             continue
         n += 1
-        trace = await runner.run(inst, _FAST_FULL)
+        trace = await runner.run(inst, config)
         if score_trace(trace, inst).hard_win:
             ids.append(inst.instance_id)
     return len(ids), n, ids
@@ -199,9 +216,10 @@ async def run_fpr_curve() -> CurveResult:
         label = "none (operating point)" if not disabled else "drop " + "+".join(
             SIGNATURE_ORDER[:prefix_len]
         )
+        cfg = config_for(disabled)
         with disabled_signatures(disabled):
-            fpr_k, fpr_n, _fpr, ci = await _benign_fpr()
-            hw_k, hw_n, hw_ids = await _deployed_hardwins("production")
+            fpr_k, fpr_n, _fpr, ci = await _benign_fpr(cfg)
+            hw_k, hw_n, hw_ids = await _deployed_hardwins(cfg, "production")
         result.cumulative.append(
             CurvePoint(label, tuple(SIGNATURE_ORDER[:prefix_len]), fpr_k, fpr_n, ci,
                        hw_k, hw_n, tuple(hw_ids))
@@ -209,9 +227,10 @@ async def run_fpr_curve() -> CurveResult:
 
     # Single-family attribution: disable exactly one at a time.
     for sig in SIGNATURE_ORDER:
+        cfg = config_for(frozenset({sig}))
         with disabled_signatures(frozenset({sig})):
-            fpr_k, fpr_n, _fpr, ci = await _benign_fpr()
-            hw_k, hw_n, hw_ids = await _deployed_hardwins("production")
+            fpr_k, fpr_n, _fpr, ci = await _benign_fpr(cfg)
+            hw_k, hw_n, hw_ids = await _deployed_hardwins(cfg, "production")
         result.singles.append(
             CurvePoint(f"drop {sig} only", (sig,), fpr_k, fpr_n, ci, hw_k, hw_n, tuple(hw_ids))
         )

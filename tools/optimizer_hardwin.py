@@ -54,6 +54,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shlex
 import sys
 import time
 from collections.abc import Callable, Sequence
@@ -73,7 +74,18 @@ from siege.redteam.llm_optimizer import (
     Strategy,
     build_proposer_agent,
 )
-from siege.ablation_matrix import AUGMENTED_CONFIGS, CUMULATIVE_CONFIGS
+from siege.ablation_matrix import (
+    AUGMENTED_CONFIGS,
+    CUMULATIVE_CONFIGS,
+    RECOMMENDED_CONFIG,
+)
+from siege.served import (
+    describe as served_endpoint,
+    install as install_served_routing,
+    openai_v1_base,
+    served_model_name,
+    served_model_spec,
+)
 from siege.corpus_builder import CORPUS_DIR
 from siege.instance_loader import load_instances
 from siege.schemas import Action, Instance
@@ -270,6 +282,11 @@ class _Progress:
 
 def _condition_label(full_config, slow_tier) -> str:
     """The ablation column this run corresponds to, for the report header."""
+    if getattr(full_config, "name", None) == RECOMMENDED_CONFIG.name:
+        return (
+            "recommended posture (full, G1 weaponization signature off, "
+            "sticky high-stakes off)"
+        )
     semgrep = getattr(full_config, "semgrep_active", False)
     slow = slow_tier is not None and slow_tier.active
     if semgrep and slow:
@@ -480,14 +497,16 @@ def _load_env() -> None:
         break
 
 
-def _served_model(model_name: str = "gpt-oss-120b") -> Any:
+def _served_model(model_name: str | None = None) -> Any:
     """Build the served ``OpenAIChatModel`` the repo's live tools use.
 
     Same construction as ``tools.end_to_end_utility.LiveModelDriver``: the
-    provider base is ``OPENAI_BASE_URL`` plus ``/v1`` (the gateway exposes the
-    OpenAI-compatible surface only under ``/v1``), authenticated with a Bearer
-    ``OPENAI_API_KEY``. Raises if the endpoint is not configured, so a live run
-    fails loudly rather than silently degrading to the offline path.
+    provider base is ``OPENAI_BASE_URL`` with its ``/v1`` suffix (added for the
+    Science Cloud gateway, which is configured at its root; kept once for hosts
+    configured with it, such as OpenRouter and Bedrock), authenticated with a
+    Bearer ``OPENAI_API_KEY``. The model name defaults to ``siege.served``'s.
+    Raises if the endpoint is not configured, so a live run fails loudly rather
+    than silently degrading to the offline path.
     """
     from pydantic_ai.models.openai import OpenAIChatModel
     from pydantic_ai.providers.openai import OpenAIProvider
@@ -501,8 +520,8 @@ def _served_model(model_name: str = "gpt-oss-120b") -> Any:
             "run offline (omit --live) or configure the served endpoint"
         )
     return OpenAIChatModel(
-        model_name,
-        provider=OpenAIProvider(base_url=base + "/v1", api_key=key),
+        model_name or served_model_name(),
+        provider=OpenAIProvider(base_url=openai_v1_base(base), api_key=key),
     )
 
 
@@ -658,7 +677,7 @@ class _SalvagingAgentProposer(Proposer):
 
 
 def served_proposer_factory(
-    model_name: str = "gpt-oss-120b",
+    model_name: str | None = None,
     *,
     temperature: float = 0.7,
     seed: int = 0,
@@ -1135,7 +1154,7 @@ def run_optimizer_hardwin_multiseed(
     budget: int = 12,
     tier: AccessTier = AccessTier.BLACK_BOX,
     seeds: Sequence[int] = (0, 1, 2, 3, 4),
-    model_name: str = "gpt-oss-120b",
+    model_name: str | None = None,
     templates: Sequence[str] = HARD_WIN_CAPABLE_TEMPLATES,
     max_instances: int | None = None,
     salvage: bool = True,
@@ -1150,6 +1169,7 @@ def run_optimizer_hardwin_multiseed(
     recording which convert. Reports a per-seed converted count, per-instance
     conversion frequency, and the aggregate structured-output health.
     """
+    model_name = model_name or served_model_name()
     wanted = set(templates)
     instances = [i for i in load_instances(CORPUS_DIR) if i.template in wanted]
     instances.sort(key=lambda i: i.instance_id)
@@ -1467,7 +1487,10 @@ def to_markdown(reports: Sequence[OptimizerHardWinReport], *, substrate: str = "
 
 
 def _multiseed_md(
-    reports: Sequence[MultiSeedReport], slow_tier: SlowTier | None
+    reports: Sequence[MultiSeedReport],
+    slow_tier: SlowTier | None,
+    full_config: Any = None,
+    command: str = "uv run python -m tools.optimizer_hardwin",
 ) -> str:
     """Multi-seed markdown plus the slow-tier health line.
 
@@ -1475,9 +1498,29 @@ def _multiseed_md(
     one, so a run killed part-way still records whether the tier was up for the
     seeds it finished.
     """
-    md = multiseed_to_markdown(reports)
+    md = (
+        "<!-- Generated report. Source module: tools.optimizer_hardwin. "
+        f"Regenerate with `{command}`. -->\n\n"
+        + multiseed_to_markdown(reports)
+    )
+    md += (
+        f"\n\n_Condition searched: **{_condition_label(full_config or _FULL, slow_tier)}**._"
+    )
     if slow_tier is not None:
         md += "\n\n" + slow_tier.health_note()
+    endpoint = served_endpoint()
+    # The attacker model comes from the reports: ``--model`` can differ from
+    # SIEGE_SERVED_MODEL, which is all ``describe()`` knows (E3 swaps it).
+    attackers = ", ".join(f"`{m}`" for m in sorted({r.model for r in reports}))
+    md += (
+        f"\n\n_Served by {endpoint['host'] or '(unset)'}, attacker "
+        f"{attackers or '`' + endpoint['model'] + '`'}"
+        + (
+            f", OpenRouter routing `{endpoint['openrouter_routing']}`"
+            if endpoint["openrouter_routing"] else ""
+        )
+        + "._"
+    )
     return md
 
 
@@ -1544,8 +1587,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     ap.add_argument(
         "--model",
-        default="gpt-oss-120b",
-        help="served model name for --live (default: gpt-oss-120b)",
+        default=None,
+        help="served model name for --live (default: SIEGE_SERVED_MODEL, else gpt-oss-120b)",
     )
     ap.add_argument(
         "--max-instances",
@@ -1581,13 +1624,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     ap.add_argument(
         "--slow-model",
-        default="openai:gpt-oss-120b",
+        default=None,
         help="model spec for the slow tier's per-gate Q-LLM agents "
-        "(default: openai:gpt-oss-120b).",
+        "(default: SIEGE_SERVED_MODEL as an openai-chat: spec, else "
+        "openai-chat:gpt-oss-120b).",
     )
     ap.add_argument(
         "--judge-model",
-        default="gpt-oss-120b",
+        default=None,
         help="model id for the slow-tier judge stage (default: gpt-oss-120b).",
     )
     ap.add_argument(
@@ -1607,9 +1651,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         default="both",
         help="which optimizer(s) to run (default both). PAIR alone halves live cost.",
     )
+    ap.add_argument(
+        "--posture",
+        choices=("full", "recommended"),
+        default="full",
+        help="the configuration the attacker searches: 'full' (Table II) or "
+        "'recommended' -- full with the G1 weaponization signature and "
+        "stickiness off (E2). Not combinable with --semgrep.",
+    )
     args = ap.parse_args(argv)
+    command = " ".join(
+        ["uv run python -m tools.optimizer_hardwin"]
+        + [shlex.quote(a) for a in (sys.argv[1:] if argv is None else argv)]
+    )
+    # Served-model defaults and OpenRouter pinning come from siege.served, so
+    # one environment decides the host for every model this run calls.
+    install_served_routing()
+    args.model = args.model or served_model_name()
+    args.slow_model = args.slow_model or served_model_spec()
+    args.judge_model = args.judge_model or served_model_name()
     tier = AccessTier(args.tier)
     full_config = _FULL
+    if args.posture == "recommended":
+        if args.semgrep:
+            print("[optimizer-hardwin] FAILED: --posture recommended has no +semgrep variant")
+            return 1
+        full_config = RECOMMENDED_CONFIG
     if args.semgrep:
         import shutil
 
@@ -1651,8 +1718,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             # strategy: the report is on disk as soon as the first one completes.
             if args.out:
                 with open(args.out, "w") as fh:
-                    fh.write(_multiseed_md(reports, slow_tier) + "\n")
-        md = _multiseed_md(reports, slow_tier)
+                    fh.write(_multiseed_md(reports, slow_tier, full_config, command) + "\n")
+        md = _multiseed_md(reports, slow_tier, full_config, command)
         if not args.out:
             print(md)
         else:
@@ -1701,4 +1768,6 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    from siege.served import exit_on_refusal
+
+    raise SystemExit(exit_on_refusal(main))

@@ -68,6 +68,23 @@ class PalisadeSettings(BaseSettings):
     """Prompt Gate. Enables prompt-side checks in `run_stream` and the
     tier-banner system prompt."""
 
+    g1_weaponization_signature_enabled: bool = True
+    """
+    Whether G1's fast tier runs the deterministic dual-use weaponization
+    denylist (`_WEAPONIZATION_PATTERNS`). On by default, which is the
+    configuration every reported attack number was measured under.
+
+    Off is a supported posture, not a debug switch. The signature is a
+    content heuristic and therefore searchable, and the property it screens
+    for is one the dual-use label axis is meant to carry at the sink, so on
+    the evaluated corpus turning it off closes no attack instance while
+    removing its benign false blocks. It stays on by default because that
+    sink-side coverage is slow-tier only: in a fast-tier deployment the
+    signature is the only check that sees weapons-design phrasing at all.
+    Turn it off only where the slow tier runs, or where the benign cost is
+    measured and accepted on your own controls.
+    """
+
     g2_enabled: bool = False
     """Tool Gate. Enables tool-call gating inside `process_tool_call`.
     """
@@ -455,6 +472,38 @@ class PalisadeSettings(BaseSettings):
     by the master slow-tier toggle (`quarantine_enabled`) and `g5_enabled`,
     so this only matters when those are on; set False to disable just the
     DAG walk while keeping the rest of G5's slow tier.
+    """
+
+    g5_lifecycle_hook_enabled: bool = True
+    """
+    Whether G5's fast tier runs the lifecycle-hook check at all. On by
+    default, and the one conservative signature we do not recommend turning
+    off: `--prolog` / `--epilog` run attacker-supplied scripts outside the
+    body every other G5 check inspects, so disabling it trades the check's
+    benign refusals for an unmediated path to the scheduler. Exposed
+    because a deployment that prices that trade differently should be able
+    to make it explicitly, and because the benign cost is only measurable
+    against a configuration that can turn it off. Prefer
+    `g5_lifecycle_hook_severity=2`, which keeps the check and makes its
+    benign case recoverable.
+    """
+
+    g5_lifecycle_hook_severity: int = 1
+    """
+    Incident severity G5 raises on a lifecycle-hook denial (`--prolog`,
+    `--epilog`, a shell substitution in a directive value, or the
+    `SLURM_PROLOG` / `LD_PRELOAD` env route). 1 (SEV1, the default) is what
+    every reported number was measured under.
+
+    The check itself is not optional: lifecycle hooks run attacker-supplied
+    scripts outside the body every other G5 check inspects, and no other
+    check sees them. The severity is. At SEV1 the incident manager
+    terminates the session and re-authentication does not revive it, which
+    legitimate staging and archival jobs using the same directives pay as an
+    irrecoverable session. Set to 2 to route the same denial through the
+    SEV2 path -- floor the session tier and force re-authentication -- which
+    keeps the denial while making the benign case recoverable. Values
+    outside {1, 2, 3} are rejected at gate construction.
     """
 
     g5_require_submit_approval: bool = False

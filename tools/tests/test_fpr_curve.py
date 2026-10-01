@@ -4,8 +4,9 @@ R5-C2: benign-FPR operating curve.
 Locks the money result and its two internal-consistency anchors: the untuned
 operating point reproduces the manuscript's 8/181 FPR and 13/205 deployed
 hard-win, the curve is monotone-decreasing in FPR as signatures drop, the
-single-family attribution matches benign_fpr.md's per-signature counts, and the
-disable context manager restores every patched signature.
+single-family attribution matches benign_fpr.md's per-signature counts, the two
+posture families are carried by the config rather than by patching the gate
+classes, and the one remaining patched signature is restored on exit.
 """
 
 from __future__ import annotations
@@ -17,25 +18,57 @@ from palisade.capabilities import g3_rag as cap_g3
 from tools.fpr_curve import (
     SIGNATURE_ORDER,
     SIGNATURES,
+    config_for,
     disabled_signatures,
     run_fpr_curve,
 )
 
 
-def test_disabled_signatures_restores_all() -> None:
-    orig_life = g5_hpc.G5HpcJobGate._check_lifecycle_hooks
-    orig_weap = g1_prompt.G1PromptGate._match_weaponization
+def test_disabled_signatures_restores_the_patched_family() -> None:
+    """``db_authority`` is the only family still disabled by patching, and it is
+    patched at both binding sites and restored on exit."""
     orig_gate = g3_rag.match_db_authority_spoof
     orig_cap = cap_g3.match_db_authority_spoof
     with disabled_signatures(frozenset(SIGNATURE_ORDER)):
-        assert g5_hpc.G5HpcJobGate._check_lifecycle_hooks is not orig_life
-        assert g1_prompt.G1PromptGate._match_weaponization is not orig_weap
         assert g3_rag.match_db_authority_spoof is not orig_gate
         assert cap_g3.match_db_authority_spoof is not orig_cap  # both binding sites
-    assert g5_hpc.G5HpcJobGate._check_lifecycle_hooks is orig_life
-    assert g1_prompt.G1PromptGate._match_weaponization is orig_weap
     assert g3_rag.match_db_authority_spoof is orig_gate
     assert cap_g3.match_db_authority_spoof is orig_cap
+
+
+def test_disabled_signatures_leaves_the_gate_methods_alone() -> None:
+    """The lifecycle and weaponization families are configuration now, so the
+    curve must not reach into the gate classes to disable them. Patching them
+    made the posture unselectable outside this tool -- which is why the
+    recommended configuration could not be searched."""
+    orig_life = g5_hpc.G5HpcJobGate._check_lifecycle_hooks
+    orig_weap = g1_prompt.G1PromptGate._match_weaponization
+    with disabled_signatures(frozenset(SIGNATURE_ORDER)):
+        assert g5_hpc.G5HpcJobGate._check_lifecycle_hooks is orig_life
+        assert g1_prompt.G1PromptGate._match_weaponization is orig_weap
+
+
+def test_config_for_carries_the_two_posture_families() -> None:
+    assert config_for(frozenset()).g5_lifecycle_hook is True
+    assert config_for(frozenset()).g1_weaponization_signature is True
+
+    off = config_for(frozenset({"lifecycle", "weaponization"}))
+    assert off.g5_lifecycle_hook is False
+    assert off.g1_weaponization_signature is False
+
+    # db_authority has no config field, so it leaves both posture fields on.
+    db_only = config_for(frozenset({"db_authority"}))
+    assert db_only.g5_lifecycle_hook is True
+    assert db_only.g1_weaponization_signature is True
+
+
+def test_config_for_rejects_unknown() -> None:
+    try:
+        config_for(frozenset({"nope"}))
+    except ValueError as e:
+        assert "nope" in str(e)
+    else:  # pragma: no cover
+        raise AssertionError("expected ValueError on unknown signature")
 
 
 def test_disabled_signatures_rejects_unknown() -> None:

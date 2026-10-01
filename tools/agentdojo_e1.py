@@ -77,6 +77,7 @@ except Exception as exc:  # pragma: no cover - exercised only without the extra
 
 __all__ = [
     "AGENTDOJO_SUITES",
+    "AGENTDOJO_BUILTIN_DEFENSES",
     "DEFAULT_BENCHMARK_VERSION",
     "is_high_stakes_tool",
     "E1Row",
@@ -87,6 +88,17 @@ __all__ = [
 ]
 
 AGENTDOJO_SUITES: tuple[str, ...] = ("workspace", "banking", "travel", "slack")
+
+#: AgentDojo's own defenses (``agentdojo.agent_pipeline.agent_pipeline.DEFENSES``
+#: in 0.1.35), named here so the CLI can offer them without the extra installed.
+#: Each is built by ``AgentPipeline.from_config`` exactly as AgentDojo ships it:
+#: they are the non-author comparators Table V is missing.
+AGENTDOJO_BUILTIN_DEFENSES: tuple[str, ...] = (
+    "tool_filter",
+    "transformers_pi_detector",
+    "spotlighting_with_delimiting",
+    "repeat_user_prompt",
+)
 DEFAULT_BENCHMARK_VERSION = "v1.2.1"
 
 #: Verbs that mark a state-changing (privileged) tool -- the sinks that matter.
@@ -255,6 +267,64 @@ def _is_transient(exc: BaseException) -> bool:
     )
 
 
+#: The placeholder litellm itself adds under ``modify_params`` when a request
+#: carries tool history but no ``tools=``. Bedrock rejects that shape outright,
+#: and it arises whenever AgentDojo's ``tool_filter`` prunes every tool for a
+#: round: the gateway's error names this placeholder as the remedy.
+_LITELLM_DUMMY_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "dummy_tool",
+        "description": "This is a dummy tool call",
+        "parameters": {"type": "object", "properties": {}},
+    },
+}
+
+
+def _history_has_tool_use(messages) -> bool:
+    for m in messages or ():
+        if not isinstance(m, Mapping):
+            continue
+        if m.get("role") == "tool" or m.get("tool_calls"):
+            return True
+    return False
+
+
+#: How often ``_enforce_tool_choice_none`` rewrote a response, for the report.
+TOOL_CHOICE_NONE_REWRITES = {"responses": 0}
+
+
+def _enforce_tool_choice_none(completion):
+    """Make a ``tool_choice="none"`` response honor that contract.
+
+    The OpenAI API guarantees no tool calls under ``tool_choice="none"``; this
+    gateway's gpt-oss does not always honor it. AgentDojo's ``tool_filter`` asks
+    exactly that way for a comma-separated list of the tools the task needs,
+    reads the tool names out of the reply's *text*, and appends the reply to
+    the conversation. A reply that calls the tools instead leaves no names in
+    the text -- every tool is pruned -- and puts calls in the history that
+    nothing executes, which the gateway then rejects. The calls are the model's
+    tool selection in another form, so they are turned back into the text the
+    filter parses and removed as calls.
+    """
+    for choice in getattr(completion, "choices", None) or ():
+        msg = getattr(choice, "message", None)
+        calls = getattr(msg, "tool_calls", None)
+        if not calls:
+            continue
+        names = [c.function.name for c in calls if getattr(c, "function", None)]
+        text = (msg.content or "").strip()
+        msg.content = (text + "\n" if text else "") + ", ".join(names)
+        msg.tool_calls = None
+        TOOL_CHOICE_NONE_REWRITES["responses"] += 1
+        _log.warning(
+            "tool_choice='none' response carried %d tool call(s) %s; converted "
+            "to text for the filter (%d so far).",
+            len(names), names, TOOL_CHOICE_NONE_REWRITES["responses"],
+        )
+    return completion
+
+
 class _BedrockSafeCompletions:
     def __init__(self, inner) -> None:
         self._inner = inner
@@ -262,10 +332,16 @@ class _BedrockSafeCompletions:
     def create(self, *args, **kwargs):
         if "messages" in kwargs:
             kwargs["messages"] = _sanitize_messages_for_bedrock(kwargs["messages"])
+        # ``tools`` may be absent, empty or openai's falsy NOT_GIVEN sentinel.
+        if not kwargs.get("tools") and _history_has_tool_use(kwargs.get("messages")):
+            kwargs["tools"] = [_LITELLM_DUMMY_TOOL]
         delay = _TRANSIENT_BACKOFF_S
         for attempt in range(1, _TRANSIENT_ATTEMPTS + 1):
             try:
-                return self._inner.create(*args, **kwargs)
+                completion = self._inner.create(*args, **kwargs)
+                if kwargs.get("tool_choice") == "none":
+                    completion = _enforce_tool_choice_none(completion)
+                return completion
             except Exception as exc:  # noqa: BLE001 -- re-raised unless transient
                 if attempt == _TRANSIENT_ATTEMPTS or not _is_transient(exc):
                     raise
@@ -358,6 +434,9 @@ class E1Result:
     n_benign_tasks: int
     n_injection_pairs: int
     cited: tuple[E1Row, ...] = CITED_BASELINES
+    #: Run-health notes recorded at generation time (``--note``): what a
+    #: replayed report cannot recompute, such as a slow tier's call counts.
+    notes: tuple[str, ...] = ()
 
     def _row(self, r: E1Row) -> str:
         def pct(v: float | None) -> str:
@@ -376,6 +455,9 @@ class E1Result:
         notes = [f"- **{r.system}** -- {r.note}" for r in self.cited if r.note]
         return "\n".join(
             [
+                "<!-- Generated report. Source module: tools.agentdojo_e1. "
+                "Regenerate with `uv run python -m tools.agentdojo_e1`. -->",
+                "",
                 "# AgentDojo headline comparison (E1)",
                 "",
                 f"PALISADE wired into AgentDojo as a live two-tier defense (G3 "
@@ -408,6 +490,20 @@ class E1Result:
                 "rows therefore measure a different configuration from the "
                 "SIEGE `full` and `+all` columns and must not be read across._",
                 "",
+                "_Every other measured row is a live-planner comparator PALISADE's "
+                "authors did not write: AgentDojo's own defenses, built by "
+                "`AgentPipeline.from_config` exactly as the package ships them, "
+                "and **Prompt policy in planner** -- the frozen E1a policy "
+                "(`siege/src/siege/redteam/baselines/prompt_only/policy.md`) "
+                "appended to the planner's system prompt with no other defense, "
+                "R1's prompt-only baseline in its live form. All rows ran in one "
+                "session against the same undefended run, so their FPRs share a "
+                "denominator._",
+                "",
+                *(
+                    ["## Run notes", "", *[f"- {n}" for n in self.notes], ""]
+                    if self.notes else []
+                ),
                 "## Cited baselines (not re-run here)",
                 "",
                 "These rows are from the cited papers on AgentDojo, not measured "
@@ -584,21 +680,31 @@ if _HAVE_AGENTDOJO:
     def build_pipelines(
         model_id: str, *, include_tool_filter: bool = False,
         screen: PalisadeScreen | None = None,
+        slow_screen: PalisadeScreen | None = None,
+        builtin_defenses: Sequence[str] = (),
+        prompt_policy: bool = False,
     ) -> dict[str, "AgentPipeline"]:
-        """Build the `undefended` and `palisade` pipelines sharing components.
+        """Build the pipelines one Table V run compares, sharing components.
 
         The undefended pipeline is AgentDojo's default (`from_config`, no
         defense); PALISADE reuses its system message / init-query / llm /
         tools-executor and inserts the two PALISADE elements into the tools loop.
+        ``screen`` is the ``palisade`` row; ``slow_screen``, when given, adds a
+        ``palisade_slow`` row beside it rather than replacing it, so one run
+        yields both PALISADE rows against the same undefended baseline.
 
-        With ``include_tool_filter`` the dict also carries ``tool_filter`` --
-        AgentDojo's own runnable **least-privilege** baseline (the ``tool_filter``
-        defense: an LLM prunes the tool set to those the task needs before each
-        round). This is the runnable IFC-family comparator R1-M5 asks for --
-        least-privilege at tool granularity, the Progent design point -- so the E1
-        head-to-head runs PALISADE beside it on the *same* base model. AgentDojo
+        ``builtin_defenses`` adds AgentDojo's own defenses, each built by
+        ``from_config`` as AgentDojo ships it -- ``tool_filter`` (an LLM prunes
+        the tool set before each round: least privilege at tool granularity),
+        ``transformers_pi_detector`` (a DeBERTa injection classifier on tool
+        outputs), ``spotlighting_with_delimiting`` and ``repeat_user_prompt``.
+        ``include_tool_filter`` is the older spelling of the first. AgentDojo
         only supports the tool filter for OpenAI(-compatible) models with a name,
         which the science-cloud endpoint is.
+
+        ``prompt_policy`` adds R1's baseline in its live-planner form: the frozen
+        E1a policy (``siege.redteam.baselines.prompt_monitor``) appended to the
+        planner's system prompt, with no other defense.
         """
         config = PipelineConfig(
             llm=_resolve_llm(model_id),
@@ -611,35 +717,71 @@ if _HAVE_AGENTDOJO:
         system_message, init_query, llm, tools_loop = base.elements
         tools_executor = tools_loop.elements[0]
 
-        screen = screen or PalisadeScreen()
-        palisade_loop = ToolsExecutionLoop(
-            [
-                PalisadeToolGate(screen=screen),  # gate proposed calls first
-                tools_executor,                     # then execute the survivors
-                PalisadeDetector(screen=screen),  # then screen the tool outputs
-                llm,
-            ]
-        )
-        palisade = AgentPipeline([system_message, init_query, llm, palisade_loop])
-        # The pipeline name is the *cache key* AgentDojo logs and resumes
-        # under, so it must encode the tier. Without the suffix a fast-only run
-        # started after a slow-tier run silently replays the slow run's cached
-        # task results and reports them under the fast label, which is a
-        # cross-configuration contamination that looks like a real measurement.
-        suffix = ""
-        if screen is not None and getattr(screen, "slow_enabled", False):
-            suffix = "-slow" if getattr(screen, "_judge", None) is not None else "-qllm"
-        palisade.name = f"{base.name}-palisade{suffix}"
-        pipelines: dict[str, "AgentPipeline"] = {"undefended": base, "palisade": palisade}
-        if include_tool_filter:
-            tf_config = PipelineConfig(
-                llm=_resolve_llm(model_id),
-                model_id=model_id,
-                defense="tool_filter",
-                system_message_name=None,
-                system_message=load_system_message(None),
+        def palisade_pipeline(scr: PalisadeScreen) -> "AgentPipeline":
+            loop = ToolsExecutionLoop(
+                [
+                    PalisadeToolGate(screen=scr),  # gate proposed calls first
+                    tools_executor,                  # then execute the survivors
+                    PalisadeDetector(screen=scr),  # then screen the tool outputs
+                    llm,
+                ]
             )
-            pipelines["tool_filter"] = AgentPipeline.from_config(tf_config)
+            pipe = AgentPipeline([system_message, init_query, llm, loop])
+            # The pipeline name is the *cache key* AgentDojo logs and resumes
+            # under, so it must encode the tier. Without the suffix a fast-only
+            # run started after a slow-tier run silently replays the slow run's
+            # cached task results and reports them under the fast label, which
+            # is a cross-configuration contamination that looks like a real
+            # measurement.
+            suffix = ""
+            if getattr(scr, "slow_enabled", False):
+                suffix = "-slow" if getattr(scr, "_judge", None) is not None else "-qllm"
+            pipe.name = f"{base.name}-palisade{suffix}"
+            return pipe
+
+        pipelines: dict[str, "AgentPipeline"] = {
+            "undefended": base,
+            "palisade": palisade_pipeline(screen or PalisadeScreen()),
+        }
+        if slow_screen is not None:
+            if not getattr(slow_screen, "slow_enabled", False):
+                raise ValueError("slow_screen must have its slow tier wired")
+            pipelines["palisade_slow"] = palisade_pipeline(slow_screen)
+
+        defenses = list(builtin_defenses)
+        if include_tool_filter and "tool_filter" not in defenses:
+            defenses.insert(0, "tool_filter")
+        for name in defenses:
+            if name not in AGENTDOJO_BUILTIN_DEFENSES:
+                raise ValueError(f"unknown AgentDojo defense {name!r}")
+            # from_config names each ``<model>-<defense>``: its own cache key.
+            pipelines[name] = AgentPipeline.from_config(
+                PipelineConfig(
+                    llm=_resolve_llm(model_id),
+                    model_id=model_id,
+                    defense=name,
+                    system_message_name=None,
+                    system_message=load_system_message(None),
+                )
+            )
+
+        if prompt_policy:
+            from siege.redteam.baselines.prompt_monitor import planner_system_suffix
+
+            pipe = AgentPipeline.from_config(
+                PipelineConfig(
+                    llm=_resolve_llm(model_id),
+                    model_id=model_id,
+                    defense=None,
+                    system_message_name=None,
+                    system_message=load_system_message(None) + planner_system_suffix(),
+                )
+            )
+            # ``defense=None`` names the pipeline after the bare model, which is
+            # the undefended row's cache key; without a distinct name this row
+            # would replay the undefended results.
+            pipe.name = f"{base.name}-prompt-policy"
+            pipelines["prompt_policy"] = pipe
         return pipelines
 
 
@@ -680,8 +822,19 @@ _PIPELINE_LABEL = {
     # run must not emit the same row label, or two artifacts are
     # indistinguishable after the fact.
     "palisade": "PALISADE proxy (deterministic tier)",
-    "tool_filter": "Tool-filter (least-privilege baseline)",
+    "palisade_slow": "PALISADE proxy (+ Q-LLM + judge)",
+    "prompt_policy": "Prompt policy in planner (E1a policy)",
+    "tool_filter": "AgentDojo tool_filter (least privilege)",
+    "transformers_pi_detector": "AgentDojo transformers_pi_detector",
+    "spotlighting_with_delimiting": "AgentDojo spotlighting_with_delimiting",
+    "repeat_user_prompt": "AgentDojo repeat_user_prompt",
 }
+
+#: Display order for a Table V run: the baseline, PALISADE, then the comparators.
+_ROW_ORDER: tuple[str, ...] = (
+    "undefended", "palisade", "palisade_slow", "prompt_policy",
+    *AGENTDOJO_BUILTIN_DEFENSES,
+)
 
 
 def _palisade_label(screen: "PalisadeScreen | None") -> str:
@@ -712,6 +865,10 @@ def run_agentdojo_e1(
     logdir: str | Path | None = None,
     include_tool_filter: bool = False,
     screen: "PalisadeScreen | None" = None,
+    slow_screen: "PalisadeScreen | None" = None,
+    builtin_defenses: Sequence[str] = (),
+    prompt_policy: bool = False,
+    only: Sequence[str] | None = None,
 ) -> E1Result:
     """Run the AgentDojo benchmark for `undefended` and `palisade` -> the E1 rows.
 
@@ -737,9 +894,29 @@ def run_agentdojo_e1(
         logdir.mkdir(parents=True, exist_ok=True)
         print(f"[agentdojo-e1] resumable log dir: {logdir}")
     pipelines = build_pipelines(
-        model_id, include_tool_filter=include_tool_filter, screen=screen
+        model_id, include_tool_filter=include_tool_filter, screen=screen,
+        slow_screen=slow_screen, builtin_defenses=builtin_defenses,
+        prompt_policy=prompt_policy,
     )
     _PIPELINE_LABEL["palisade"] = _palisade_label(screen)
+    if slow_screen is not None:
+        _PIPELINE_LABEL["palisade_slow"] = _palisade_label(slow_screen)
+    # ``only`` restricts which rows this process runs, so rows can run as
+    # parallel processes sharing one log dir. ``undefended`` always runs first:
+    # every FPR is defined against it, and once its logs exist a later process
+    # replays them from the log dir instead of calling the model.
+    if only is not None:
+        unknown = sorted(set(only) - set(pipelines))
+        if unknown:
+            raise ValueError(f"not built in this run: {unknown}")
+        keep = {"undefended", *only}
+        pipelines = {k: v for k, v in pipelines.items() if k in keep}
+    pipelines = dict(
+        sorted(
+            pipelines.items(),
+            key=lambda kv: _ROW_ORDER.index(kv[0]) if kv[0] in _ROW_ORDER else 99,
+        )
+    )
 
     per_defense_benign: dict[str, dict] = {}
     per_defense_sec: dict[str, dict] = {}
@@ -829,17 +1006,40 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI (live)
     )
     parser.add_argument("--report-out", default=None, metavar="PATH")
     parser.add_argument(
+        "--defenses", nargs="*", default=[], choices=AGENTDOJO_BUILTIN_DEFENSES,
+        metavar="NAME",
+        help="Also run these AgentDojo built-in defenses on the same base model: "
+             + ", ".join(AGENTDOJO_BUILTIN_DEFENSES) + ".",
+    )
+    parser.add_argument(
+        "--prompt-policy", action="store_true",
+        help="Also run the frozen E1a policy appended to the planner's system "
+             "prompt, with no other defense (R1's prompt-only baseline, live).",
+    )
+    parser.add_argument(
+        "--pipelines", nargs="*", default=None, metavar="KEY",
+        help="Run only these rows in this process (undefended is always "
+             "included, and replayed from --logdir once it exists). Keys: "
+             + ", ".join(_ROW_ORDER) + ".",
+    )
+    parser.add_argument(
+        "--note", action="append", default=[], metavar="TEXT",
+        help="Add a run note to the report (repeatable).",
+    )
+    parser.add_argument(
         "--slow", action="store_true",
-        help="Escalate every fast-tier allow to the deployed quarantined model, "
-             "the same rule the sidecar uses (a fast-tier deny short-circuits). "
-             "Without this the run exercises the deterministic tier only.",
+        help="Add the 'palisade_slow' row: every fast-tier allow escalates to "
+             "the deployed quarantined model, the same rule the sidecar uses "
+             "(a fast-tier deny short-circuits). The deterministic 'palisade' "
+             "row is still built beside it; use --pipelines to run one.",
     )
     parser.add_argument(
-        "--slow-model", default="openai:gpt-oss-120b",
-        help="Model spec for the quarantined slow tier (default: openai:gpt-oss-120b).",
+        "--slow-model", default=None,
+        help="Model spec for the quarantined slow tier (default: SIEGE_SERVED_MODEL "
+             "as an openai-chat: spec, else openai-chat:gpt-oss-120b).",
     )
     parser.add_argument(
-        "--judge-model", default="gpt-oss-120b",
+        "--judge-model", default=None,
         help="Model id for the slow tier's judge stage (default: gpt-oss-120b).",
     )
     parser.add_argument(
@@ -848,8 +1048,13 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI (live)
              "The judge is part of the deployed slow tier, so this is an ablation.",
     )
     args = parser.parse_args(argv)
+    from siege.served import install, served_model_name, served_model_spec
+
+    install()
+    args.slow_model = args.slow_model or served_model_spec()
+    args.judge_model = args.judge_model or served_model_name()
     _require_agentdojo()
-    screen = None
+    slow_screen = None
     if args.slow:
         from palisade.quarantine import build_quarantine_agent
 
@@ -867,7 +1072,7 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI (live)
                     "measure the quarantined model alone."
                 )
                 return 1
-        screen = PalisadeScreen(quarantine_agent=agent, judge=judge)
+        slow_screen = PalisadeScreen(quarantine_agent=agent, judge=judge)
         print(
             f"[agentdojo-e1] slow tier: Q-LLM {args.slow_model}, judge "
             + (args.judge_model if judge is not None else "ABLATED")
@@ -878,12 +1083,17 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI (live)
         benchmark_version=args.benchmark_version, user_tasks=args.user_tasks,
         injection_tasks=args.injection_tasks,
         logdir=args.logdir, include_tool_filter=args.tool_filter_baseline,
-        screen=screen,
+        slow_screen=slow_screen, builtin_defenses=args.defenses,
+        prompt_policy=args.prompt_policy, only=args.pipelines,
     )
+    if args.note:
+        from dataclasses import replace as _replace
+
+        result = _replace(result, notes=tuple(args.note))
     print(f"wrote {write_results_doc(result, args.report_out)}")
     print(result.to_markdown())
-    if screen is not None:
-        st = screen.stats
+    if slow_screen is not None:
+        st = slow_screen.stats
         errors = st.get("errors", 0)
         print(
             f"\n[agentdojo-e1] tier health: {st['fast_flags']} fast flag(s), "
@@ -900,4 +1110,6 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - CLI (live)
 
 
 if __name__ == "__main__":  # pragma: no cover
-    sys.exit(main())
+    from siege.served import exit_on_refusal
+
+    sys.exit(exit_on_refusal(main))

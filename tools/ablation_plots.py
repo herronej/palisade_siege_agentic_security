@@ -77,9 +77,14 @@ PALETTE = {
     "hard": "#D55E00",      # vermillion
     "misuse": "#009E73",    # green
     "benign": "#E69F00",    # orange
+    # All three text tones are black. The greys they replaced (#52514e,
+    # #898781) read as washed-out on a projector and in print at column
+    # width, and the tonal hierarchy they carried is redundant: size and
+    # weight already separate a title from a tick label, and the
+    # cumulative/independent split is marked by its own rule.
     "ink": "#0b0b0b",
-    "secondary": "#52514e",
-    "muted": "#898781",
+    "secondary": "#0b0b0b",
+    "muted": "#0b0b0b",
     "grid": "#e1e0d9",
     "axis": "#c3c2b7",
 }
@@ -97,7 +102,7 @@ SUITES = (
     ("misuse", "Misuse / safety"),
 )
 FAMILIES = (
-    ("B1", "B1 prompt"),
+    ("B1", "B1 attached content"),
     ("B3", "B3 retrieval"),
     ("B4", "B4 code"),
     ("B5", "B5 submission"),
@@ -327,6 +332,18 @@ def validate(rep: Report, path: Path) -> list[str]:
 # Rendering
 # -----------------------------------------------------------------
 
+#: Multiplier on every type size in this module. These figures are placed at
+#: IEEE column width and reused on slides, where the original 5.8-9 pt sizes
+#: shrink below legibility. Every ``fontsize=`` here is written as ``_fs(n)``
+#: so the whole figure set scales from this one number.
+FONT_SCALE = 1.5
+
+
+def _fs(pt: float) -> float:
+    """A type size in points, scaled by :data:`FONT_SCALE`."""
+    return round(pt * FONT_SCALE, 1)
+
+
 def _style():
     import matplotlib as mpl
 
@@ -336,9 +353,9 @@ def _style():
         "savefig.bbox": "tight",
         "font.family": "sans-serif",
         "font.sans-serif": ["DejaVu Sans"],
-        "font.size": 8,
-        "axes.titlesize": 9,
-        "axes.labelsize": 8,
+        "font.size": _fs(8),
+        "axes.titlesize": _fs(9),
+        "axes.labelsize": _fs(8),
         "axes.edgecolor": PALETTE["axis"],
         "axes.labelcolor": PALETTE["secondary"],
         "axes.linewidth": 0.6,
@@ -349,12 +366,12 @@ def _style():
         "grid.linestyle": "-",
         "xtick.color": PALETTE["muted"],
         "ytick.color": PALETTE["muted"],
-        "xtick.labelsize": 7,
-        "ytick.labelsize": 7,
+        "xtick.labelsize": _fs(7),
+        "ytick.labelsize": _fs(7),
         "xtick.major.size": 0,
         "ytick.major.size": 0,
         "legend.frameon": False,
-        "legend.fontsize": 7.5,
+        "legend.fontsize": _fs(7.5),
     })
 
 
@@ -462,7 +479,7 @@ def _band(ax, xs_cum, xs_aug, rep, suite, names, key, colour, *, label, marker,
             label=label, linestyle="--" if dashed else "-", zorder=3)
     ax.annotate(f"{rate[-1]:.0f}%", (xs_aug[-1], rate[-1]),
                 textcoords="offset points", xytext=(7, dy),
-                color=colour, fontsize=7.5, fontweight="bold")
+                color=colour, fontsize=_fs(7.5), fontweight="bold")
     return rate
 
 
@@ -474,20 +491,20 @@ def figure_overview(rep: Report, out: Path) -> Path:
     xs_cum, xs_aug, split = _split_x(len(names))
     xs = xs_cum + xs_aug
     fig, (ax, bx) = plt.subplots(
-        2, 1, figsize=(7.16, 4.6), height_ratios=[2.6, 1], sharex=True)
+        2, 1, figsize=(3.4, 3.4), height_ratios=[2.6, 1], sharex=True)
 
     _band(ax, xs_cum, xs_aug, rep, "security", names, "soft",
-          PALETTE["soft"], label="soft win (inspection evasion)",
+          PALETTE["soft"], label="soft win",
           marker="o", dy=1)
     _band(ax, xs_cum, xs_aug, rep, "security", names, "hard",
-          PALETTE["hard"], label="hard win (capability bound)",
+          PALETTE["hard"], label="hard win",
           marker="s", dy=-7)
     _band(ax, xs_cum, xs_aug, rep, "misuse", names, "soft",
-          PALETTE["misuse"], label="misuse (single principal, excluded)",
+          PALETTE["misuse"], label="misuse (excl.)",
           marker="^", dashed=True)
 
     for _ax in (ax,):
-        _ax.axvline(split, color=PALETTE["ink"], lw=0.7, alpha=0.32, zorder=1)
+        _ax.axvline(split, color=PALETTE["ink"], lw=0.9, alpha=0.45, zorder=1)
     ax.set_ylim(-4, 108)
     ax.set_xlim(-0.4, xs_aug[-1] + 0.62)
     ax.set_yticks([0, 25, 50, 75, 100])
@@ -502,7 +519,7 @@ def figure_overview(rep: Report, out: Path) -> Path:
 
     ben = [rep.benign[c] for c in names]
     n_cum = len(xs_cum)
-    bx.axvline(split, color=PALETTE["ink"], lw=0.7, alpha=0.32, zorder=1)
+    bx.axvline(split, color=PALETTE["ink"], lw=0.9, alpha=0.45, zorder=1)
     bx.plot(xs_cum, ben[:n_cum], color=PALETTE["benign"], linewidth=1.6,
             marker="D", markersize=3.2, markeredgecolor="white",
             markeredgewidth=0.5)
@@ -512,7 +529,7 @@ def figure_overview(rep: Report, out: Path) -> Path:
             marker="D", markersize=3.2, markeredgecolor="white",
             markeredgewidth=0.5)
     bx.annotate(f"{ben[-1]:.1f}%", (xs_aug[-1], ben[-1]), textcoords="offset points",
-                xytext=(7, -2), color=PALETTE["benign"], fontsize=7.5,
+                xytext=(7, -2), color=PALETTE["benign"], fontsize=_fs(7.5),
                 fontweight="bold")
     bx.set_ylim(88, 102)
     bx.set_yticks([90, 95, 100])
@@ -520,11 +537,8 @@ def figure_overview(rep: Report, out: Path) -> Path:
     bx.grid(axis="y", zorder=0)
     bx.set_axisbelow(True)
     bx.set_xticks(xs, _shorts(), rotation=32, ha="right")
-    for _lab, _x in zip(bx.get_xticklabels(), xs):
-        if _x > split:
-            _lab.set_color(PALETTE["muted"])
     bx.set_title("Benign utility", loc="left",
-                 color=PALETTE["secondary"], fontsize=9, pad=6)
+                 color=PALETTE["secondary"], fontsize=_fs(9), pad=6)
 
     # Explanatory text lives in the LaTeX caption, not in the figure.
     fig.align_ylabels((ax, bx))
@@ -570,7 +584,7 @@ def figure_heatmap(rep: Report, out: Path) -> Path:
                     linewidth=0))
                 if pct:
                     ax.text(x + 0.5, y + 0.5, f"{pct:.0f}",
-                            ha="center", va="center", fontsize=5.8,
+                            ha="center", va="center", fontsize=_fs(5.8),
                             color="white" if pct >= 55 else PALETTE["ink"])
 
         ax.set_xlim(0, len(names))
@@ -591,16 +605,16 @@ def figure_heatmap(rep: Report, out: Path) -> Path:
         ticks.append(i + 0.5)
         labels.append(f"{tag}  {name}"
                       + ("  †" if row[1] in rep.cross_tenant else ""))
-    axes[0].set_yticks(ticks, labels, fontsize=6.4)
+    axes[0].set_yticks(ticks, labels, fontsize=_fs(6.4))
     axes[0].tick_params(axis="y", pad=2)
 
     for y, title in breaks:
-        axes[0].annotate(title, (0, y + 0.75), xytext=(-120, 0), fontsize=7.2,
+        axes[0].annotate(title, (0, y + 0.75), xytext=(-120, 0), fontsize=_fs(7.2),
                          textcoords="offset points", color=PALETTE["ink"],
                          fontweight="bold", va="center", annotation_clip=False)
 
     fig.suptitle("SIEGE v0.1 -- per-class ablation, production taint bound",
-                 x=0.006, y=0.995, ha="left", va="top", fontsize=10.5,
+                 x=0.006, y=0.995, ha="left", va="top", fontsize=_fs(10.5),
                  fontweight="bold", color=PALETTE["ink"])
     fig.text(0.006, 0.004,
              "Blank = 0%. † = cross-tenant (shared global RAG corpus), so the "
@@ -608,7 +622,7 @@ def figure_heatmap(rep: Report, out: Path) -> Path:
              "ASR is gate-only and 100% by construction -- those three classes "
              "are bounded by the contract layer, which caught 15/15 "
              "(contract-evaded ASR 0%).",
-             fontsize=6.5, color=PALETTE["muted"], va="bottom")
+             fontsize=_fs(6.5), color=PALETTE["muted"], va="bottom")
     fig.subplots_adjust(left=0.205, right=0.997, top=0.945, bottom=0.075,
                         wspace=0.06)
     return _save(fig, out, "ablation_heatmap", tight=False)
@@ -635,7 +649,21 @@ def figure_boundary(rep: Report, out: Path) -> Path:
     xs_all = xs_cum + xs_aug
     split = (xs_cum[-1] + xs_aug[0]) / 2.0
 
-    fig, axes = plt.subplots(1, len(FAMILIES), figsize=(7.16, 2.35), sharey=True)
+    # Two rows of three rather than one row of five, at the same 7.16 in width.
+    # Five panels across cannot hold a legible type size: at this size the
+    # panel titles ran into each other and the rotated tick labels overlapped
+    # their neighbours. Widening the figure is not the fix -- the figure is
+    # placed at a fixed width, so a wider canvas scales the type back down and
+    # loses exactly what it bought. Splitting the row roughly doubles each
+    # panel's share of that fixed width instead, which is what pays for the
+    # type. The sixth cell is empty and carries the legend.
+    # hspace carries the upright tick labels of the upper row clear of the
+    # lower row's two-line titles; at the default they overlap.
+    fig, axes2d = plt.subplots(2, 3, figsize=(7.16, 6.0), sharey=True,
+                               gridspec_kw={"hspace": 0.68, "wspace": 0.18})
+    axes = axes2d.ravel()
+    legend_ax = axes[len(FAMILIES)]
+    legend_ax.set_axis_off()
 
     for ax, (fam, title) in zip(axes, FAMILIES):
         cells = [rep.pooled("security", c, family=fam) for c in names]
@@ -643,7 +671,7 @@ def figure_boundary(rep: Report, out: Path) -> Path:
 
         # One rule, not two: `full` is already the visible end of the connected
         # line, so a second mark on it read as a double rule with the divider.
-        ax.axvline(split, color=PALETTE["ink"], lw=0.7, alpha=0.32, zorder=1)
+        ax.axvline(split, color=PALETTE["ink"], lw=0.9, alpha=0.45, zorder=1)
 
         # Soft is drawn wider and hard narrower on top of it, because in B1 the
         # two series are identical at every configuration (its only class is
@@ -670,22 +698,30 @@ def figure_boundary(rep: Report, out: Path) -> Path:
             ax.annotate(f"{rate[-1]:.0f}", (xs_aug[-1], rate[-1]),
                         textcoords="offset points",
                         xytext=(4, -5.5 if key == "hard" else 3.5),
-                        fontsize=7, color=colour, zorder=4)
+                        fontsize=_fs(7), color=colour, zorder=4)
 
-        ax.set_title(f"{title}\n$n={n}$", loc="left", fontsize=8,
+        ax.set_title(f"{title}\n$n={n}$", loc="left", fontsize=_fs(8),
                      color=PALETTE["ink"], pad=5)
-        ax.set_xticks(xs_all, shorts, rotation=55, ha="right", fontsize=7)
+        # Upright rather than the old 55 degrees. A slanted label's horizontal
+        # footprint grows with its type size, so at this size 55 degrees
+        # collides with the next tick; upright labels occupy only their line
+        # height horizontally and clear each other at any size the panel holds.
+        ax.set_xticks(xs_all, shorts, rotation=90, ha="center", fontsize=_fs(7))
         ax.set_xlim(-0.6, xs_aug[-1] + 1.15)
         ax.set_ylim(-5, 108)
         ax.set_yticks([0, 25, 50, 75, 100])
         ax.grid(axis="y", zorder=0)
         ax.set_axisbelow(True)
-        for lab, xpos in zip(ax.get_xticklabels(), xs_all):
-            if xpos > split:
-                lab.set_color(PALETTE["muted"])
 
-    axes[0].set_ylabel("attack success (%)")
-    axes[-1].legend(loc="upper right", handlelength=1.4, fontsize=7)
+    # One label per row: `sharey` hides the tick labels on the inner columns,
+    # not on the second row's leftmost panel.
+    for _row_start in (0, 3):
+        axes[_row_start].set_ylabel("attack success (%)")
+    # The legend sits in the empty sixth cell rather than inside a panel, where
+    # at this type size it covered the XC curves it was meant to explain.
+    _handles, _labels = axes[0].get_legend_handles_labels()
+    legend_ax.legend(_handles[:2], _labels[:2], loc="center left",
+                     handlelength=1.8, fontsize=_fs(8), frameon=False)
     # Explanatory text lives in the LaTeX caption, not in the figure.
     return _save(fig, out, "ablation_boundary")
 
@@ -715,7 +751,7 @@ def figure_tradeoff(rep: Report, out: Path) -> Path:
             at[2].append(short)
     for b, h, shorts in merged.values():
         ax.annotate(", ".join(shorts), (b, h), textcoords="offset points",
-                    xytext=(6, 4), fontsize=6.8, color=PALETTE["secondary"])
+                    xytext=(6, 4), fontsize=_fs(6.8), color=PALETTE["secondary"])
 
     ax.set_xlabel("benign utility (%)")
     ax.set_ylabel("security hard-win ASR (%)")
@@ -729,7 +765,7 @@ def figure_tradeoff(rep: Report, out: Path) -> Path:
     fig.text(0.0, -0.02,
              "Each point is one cumulative configuration; utility decreases to "
              "the right.",
-             fontsize=6.5, color=PALETTE["muted"], va="top")
+             fontsize=_fs(6.5), color=PALETTE["muted"], va="top")
     return _save(fig, out, "ablation_tradeoff")
 
 

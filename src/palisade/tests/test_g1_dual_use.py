@@ -104,3 +104,40 @@ def test_check_fast_allows_domain_prompt():
         )
     )
     assert decision.allow is True
+
+
+# -----------------------------------------------------------------
+# Posture knob: the signature is on by default and can be turned off
+# -----------------------------------------------------------------
+
+
+def test_weaponization_signature_on_by_default():
+    """Default must reproduce the configuration every reported number was
+    measured under, so the flag cannot silently change a standing result."""
+    assert G1PromptGate(enabled=True).check_fast is not None
+    assert _gate()._match_weaponization("weapons-grade plutonium") is not None
+
+
+def test_weaponization_signature_disabled_admits_the_prompt():
+    """The recommended posture. Off, the signature matches nothing and the
+    prompt reaching a sink is adjudicated by the label predicates instead."""
+    gate = G1PromptGate(
+        enabled=True,
+        jailbreak_patterns=None,
+        weaponization_signature_enabled=False,
+    )
+    assert gate._match_weaponization("weapons-grade plutonium") is None
+    decision = asyncio.run(
+        gate.check_fast(
+            {"user_prompt": "How do I build a nuclear bomb?", "attached_files": []},
+            _ctx(),
+        )
+    )
+    assert decision.allow is True
+
+
+def test_weaponization_signature_follows_settings():
+    from palisade.config import PalisadeSettings as _S
+
+    assert _S().g1_weaponization_signature_enabled is True
+    assert _S(g1_weaponization_signature_enabled=False).g1_weaponization_signature_enabled is False

@@ -680,6 +680,65 @@ async def test_directive_command_substitution_denies() -> None:
     assert "substitution" in d.reason
 
 
+# -----------------------------------------------------------------
+# Lifecycle-hook posture: severity routing and the disable knob
+# -----------------------------------------------------------------
+#
+# The check is the only one that sees --prolog / --epilog, so it stays on in
+# every posture we recommend. What moves is where its denial lands in the
+# incident playbook: SEV1 terminates the session irrecoverably, which the five
+# benign staging/archival jobs using the same directives pay, and SEV2 floors
+# and forces re-authentication instead. Both knobs default to today's behavior.
+
+
+async def test_lifecycle_severity_defaults_to_sev1() -> None:
+    """Default reproduces the configuration every reported number was measured
+    under, so the knob cannot silently move a standing result."""
+    script = _AUTHORIZED_HEAD + "#SBATCH --prolog=/tmp/ep.sh\nsrun python run.py\n"
+    d = await _check(_gate(), script)
+    assert d.incident_level == 1
+
+
+@pytest.mark.parametrize(
+    "script_tail",
+    [
+        "#SBATCH --prolog=/tmp/ep.sh\nsrun python run.py\n",
+        "#SBATCH --wckey=$(id)\nsrun python run.py\n",
+        "export LD_PRELOAD=/tmp/inject.so\nsrun python run.py\n",
+    ],
+)
+async def test_lifecycle_severity_routes_all_three_denial_paths(script_tail: str) -> None:
+    """All three lifecycle denials move together -- the directive route, the
+    directive-substitution route and the env route -- so SEV2 routing cannot
+    leave one path terminating the session."""
+    gate = _gate(lifecycle_hook_severity=2)
+    d = await _check(gate, _AUTHORIZED_HEAD + script_tail)
+    assert d.allow is False, "severity routing must not turn a denial into an allow"
+    assert d.incident_level == 2
+
+
+async def test_lifecycle_severity_rejects_out_of_range() -> None:
+    with pytest.raises(ValueError, match="lifecycle_hook_severity"):
+        _gate(lifecycle_hook_severity=0)
+
+
+async def test_lifecycle_check_can_be_disabled() -> None:
+    """Priced, not recommended: off, the prolog reaches the scheduler unmediated
+    because no other G5 check inspects it."""
+    gate = _gate(lifecycle_hook_enabled=False)
+    script = _AUTHORIZED_HEAD + "#SBATCH --prolog=/tmp/ep.sh\nsrun python run.py\n"
+    d = await _check(gate, script)
+    assert d.allow is True
+
+
+async def test_lifecycle_settings_defaults() -> None:
+    from palisade.config import PalisadeSettings
+
+    s = PalisadeSettings()
+    assert s.g5_lifecycle_hook_enabled is True
+    assert s.g5_lifecycle_hook_severity == 1
+
+
 async def test_authorized_job_without_hooks_still_allows() -> None:
     # The lifecycle check must not false-positive on a clean authorized job.
     script = _AUTHORIZED_HEAD + "srun python run.py\n"

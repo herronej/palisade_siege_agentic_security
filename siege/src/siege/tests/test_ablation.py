@@ -10,7 +10,10 @@ config.
 from __future__ import annotations
 
 from siege.ablation_matrix import (
+    AUGMENTED_CONFIGS,
     CUMULATIVE_CONFIGS,
+    RECOMMENDED_CONFIG,
+    RECOMMENDED_SEV2_CONFIG,
     GateLayer,
     build_gate_stack,
 )
@@ -80,3 +83,69 @@ def test_gate_stack_full_has_all_base_gates():
     for gid in ("G1", "G2", "G3", "G4", "G5", "G6"):
         gate = stack.gate_for(gid)
         assert gate is not None and gate.enabled
+
+
+# -----------------------------------------------------------------
+# Posture configs
+# -----------------------------------------------------------------
+#
+# The manuscript recommends a posture -- full, G1 weaponization signature off,
+# stickiness off -- that used to exist only as a monkeypatch inside one
+# analysis tool. That made it unselectable by a reader and unreachable by a
+# search driver, which is why it is the one configuration the adaptive runs
+# never covered. These pin it as a real config that threads into the gates.
+
+
+def test_standing_configs_keep_todays_posture():
+    """Every standing config must default to the configuration the reported
+    numbers were measured under, or adding the knobs moves a result."""
+    for cfg in (*CUMULATIVE_CONFIGS, *AUGMENTED_CONFIGS):
+        assert cfg.g1_weaponization_signature is True, cfg.name
+        assert cfg.g5_lifecycle_hook is True, cfg.name
+        assert cfg.g5_lifecycle_hook_severity == 1, cfg.name
+        assert cfg.sticky_high_stakes is True, cfg.name
+
+
+def test_recommended_config_is_full_with_the_two_knobs_off():
+    full = CUMULATIVE_CONFIGS[-1]
+    rec = RECOMMENDED_CONFIG
+    # Same layers and the same two full-only enforcement mechanisms.
+    assert rec.layers == full.layers
+    assert rec.capability_bound_active is True
+    assert rec.trust_scorer_active is True
+    # The two knobs the recommendation turns off.
+    assert rec.g1_weaponization_signature is False
+    assert rec.sticky_high_stakes is False
+    # And the one it explicitly keeps: G5's lifecycle-hook check is the only
+    # check that sees --prolog / --epilog.
+    assert rec.g5_lifecycle_hook is True
+    assert rec.g5_lifecycle_hook_severity == 1
+
+
+def test_recommended_sev2_config_only_moves_the_severity():
+    rec, sev2 = RECOMMENDED_CONFIG, RECOMMENDED_SEV2_CONFIG
+    assert sev2.g5_lifecycle_hook is True, "SEV2 routing keeps the check"
+    assert sev2.g5_lifecycle_hook_severity == 2
+    for field in (
+        "layers",
+        "capability_bound_active",
+        "trust_scorer_active",
+        "semgrep_active",
+        "quarantine_active",
+        "g1_weaponization_signature",
+        "sticky_high_stakes",
+    ):
+        assert getattr(sev2, field) == getattr(rec, field), field
+
+
+def test_posture_knobs_reach_the_gates():
+    """The knobs are worth nothing if build_gate_stack drops them."""
+    stack = build_gate_stack(RECOMMENDED_SEV2_CONFIG)
+    g1, g5 = stack.gate_for("G1"), stack.gate_for("G5")
+    assert g1._match_weaponization("weapons-grade plutonium") is None
+    assert g5._lifecycle_hook_severity == 2
+    assert g5._lifecycle_hook_enabled is True
+
+    default = build_gate_stack(CUMULATIVE_CONFIGS[-1])
+    assert default.gate_for("G1")._match_weaponization("weapons-grade plutonium")
+    assert default.gate_for("G5")._lifecycle_hook_severity == 1

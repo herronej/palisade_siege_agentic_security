@@ -547,6 +547,9 @@ class PalisadeSidecar:
                 intent_self_consistency_samples=(
                     self._settings.quarantine_self_consistency_samples
                 ),
+                weaponization_signature_enabled=(
+                    self._settings.g1_weaponization_signature_enabled
+                ),
             )
         if self._settings.g2_enabled:
             gates["G2"] = G2ToolGate(
@@ -607,6 +610,12 @@ class PalisadeSidecar:
                 chained_job_dag_enabled=self._settings.g5_chained_job_dag_enabled,
                 code_intent_self_consistency_samples=(
                     self._settings.quarantine_self_consistency_samples
+                ),
+                lifecycle_hook_enabled=(
+                    self._settings.g5_lifecycle_hook_enabled
+                ),
+                lifecycle_hook_severity=(
+                    self._settings.g5_lifecycle_hook_severity
                 ),
             )
         if self._settings.g6_enabled:

@@ -127,6 +127,41 @@ class AblationConfig:
     #: separately rather than folded into ``full``.
     fail_closed_unlabeled: bool = False
 
+    # ----- Posture knobs -------------------------------------------------
+    # Three settings a deployment tunes without changing which layers are
+    # live. They are fields rather than monkeypatches so the posture the
+    # manuscript recommends is a configuration a reader can select, and so a
+    # search driver can be pointed at it (E2). Defaults reproduce the
+    # configuration every standing number was measured under.
+
+    #: G1's deterministic weaponization denylist. False is the recommended
+    #: posture: on the evaluated corpus it closes no attack instance and
+    #: removes two of the eight benign false blocks.
+    g1_weaponization_signature: bool = True
+
+    #: G5's lifecycle-hook check. The one conservative signature the
+    #: manuscript recommends keeping: it is the only check that sees
+    #: ``--prolog`` / ``--epilog``. Exposed so its benign cost can be priced
+    #: against a configuration that turns it off.
+    g5_lifecycle_hook: bool = True
+
+    #: Incident severity for a G5 lifecycle-hook denial. 1 (SEV1) terminates
+    #: the session irrecoverably; 2 (SEV2) floors and forces
+    #: re-authentication, keeping the denial while making the five benign
+    #: lifecycle-hook blocks recoverable.
+    g5_lifecycle_hook_severity: int = 1
+
+    #: Whether a high-stakes denial ratchets a per-capability floor that
+    #: later benign traffic cannot lift. Read by the runner when it builds
+    #: the session's ``TrustScorer``.
+    sticky_high_stakes: bool = True
+
+    #: Replace every gate with the prompt-only monitor (E1a): a model reading
+    #: the frozen policy adjudicates every action, and nothing of PALISADE's
+    #: runs. Meaningful only with ``layers`` empty and both full-only
+    #: mechanisms off; see ``PROMPT_MONITOR_CONFIG``.
+    prompt_monitor: bool = False
+
     def has(self, layer: GateLayer) -> bool:
         return layer in self.layers
 
@@ -239,6 +274,50 @@ FAIL_CLOSED_CONFIG: AblationConfig = AblationConfig(
     capability_bound_active=True,
     trust_scorer_active=True,
     fail_closed_unlabeled=True,
+)
+
+#: The recommended posture: ``full`` with the G1 weaponization signature off
+#: and stickiness off, retaining the trust scorer, the capability bound and the
+#: G5 lifecycle-hook check. This is the configuration the manuscript
+#: recommends, and until it existed as a config it could only be produced by
+#: monkeypatching the gate methods inside one analysis tool -- which meant no
+#: adaptive driver could be pointed at it, and a reader could not select it.
+#: Kept out of ``AUGMENTED_CONFIGS`` so the standing sweep stays nine columns.
+RECOMMENDED_CONFIG: AblationConfig = AblationConfig(
+    name="full (recommended)",
+    layers=_FULL.layers,
+    capability_bound_active=True,
+    trust_scorer_active=True,
+    g1_weaponization_signature=False,
+    sticky_high_stakes=False,
+)
+
+#: The SEV2 lifecycle-hook routing posture: the recommended configuration with
+#: the G5 lifecycle-hook denial raised at SEV2 rather than SEV1, so the five
+#: benign lifecycle-hook blocks force re-authentication instead of ending the
+#: session irrecoverably. The check is unchanged; only where its denial lands
+#: in the incident playbook moves.
+RECOMMENDED_SEV2_CONFIG: AblationConfig = AblationConfig(
+    name="full (recommended, hooks at SEV2)",
+    layers=_FULL.layers,
+    capability_bound_active=True,
+    trust_scorer_active=True,
+    g1_weaponization_signature=False,
+    sticky_high_stakes=False,
+    g5_lifecycle_hook_severity=2,
+)
+
+#: R1's baseline (E1a): no PALISADE at all. No gate layer, no capability bound,
+#: no trust scorer; every action goes to a model reading the frozen policy,
+#: which receives no capability label. A prompt baseline that silently kept the
+#: capability bound -- it runs before any gate -- would inherit the structural
+#: predicate it is meant to be compared against.
+PROMPT_MONITOR_CONFIG: AblationConfig = AblationConfig(
+    name="prompt-only monitor",
+    layers=frozenset(),
+    capability_bound_active=False,
+    trust_scorer_active=False,
+    prompt_monitor=True,
 )
 
 #: The judge-ablated column: ``full +all`` with the slow-tier judge taken
@@ -384,6 +463,30 @@ class GateStack:
     def live_ids(self) -> frozenset[str]:
         return frozenset(self._gates.keys())
 
+    #: True when one model adjudicates every action, egress included, so the
+    #: runner must not apply PALISADE's deterministic grounding predicate on
+    #: its behalf.
+    monitor_only: bool = False
+
+
+class MonitorGateStack(GateStack):
+    """Every action -- including one no gate would defend -- goes to one gate."""
+
+    monitor_only = True
+
+    def __init__(self, monitor: Gate) -> None:
+        super().__init__({gid: monitor for gid in MONITOR_GATE_IDS})
+        self._monitor = monitor
+
+    def gate_for(self, gate_id: str | None) -> Gate | None:
+        return self._monitor
+
+
+#: Every key the runner may look a slow-tier agent up under for a monitor
+#: stack: the six gates, plus the empty key it uses for an action no gate
+#: defends.
+MONITOR_GATE_IDS: tuple[str, ...] = ("G1", "G2", "G3", "G4", "G5", "G6", "")
+
 
 _log = logging.getLogger(__name__)
 
@@ -483,6 +586,16 @@ def build_gate_stack(
     gate's constructor so the slow tier actually runs; absent it, the gate
     is fast-tier only (unchanged default).
     """
+    if config.prompt_monitor:
+        # Imported here so the gate grid does not pull in the baseline.
+        from siege.redteam.baselines.prompt_monitor import PromptOnlyMonitorGate
+
+        if config.layers or config.capability_bound_active or config.trust_scorer_active:
+            raise ValueError(
+                f"{config.name!r}: a prompt-only monitor config must run no "
+                "PALISADE layer, capability bound or trust scorer"
+            )
+        return MonitorGateStack(PromptOnlyMonitorGate(enabled=True))
     qa = quarantine_agents or {}
     gates: dict[str, Gate] = {}
     if config.has(GateLayer.G1):
@@ -496,6 +609,7 @@ def build_gate_stack(
             enabled=True,
             intent_extraction_agent=qa.get("G1"),
             slow_tier_fail_open=True,
+            weaponization_signature_enabled=config.g1_weaponization_signature,
         )
     if config.has(GateLayer.G2):
         # The B2 enforcement wrapper -- enforcement-only, present in full.
@@ -541,6 +655,8 @@ def build_gate_stack(
             # allocations map the check no-ops.
             allocation_policy=_EVAL_G5_ALLOCATION_POLICY,
             slow_tier_fail_open=True,
+            lifecycle_hook_enabled=config.g5_lifecycle_hook,
+            lifecycle_hook_severity=config.g5_lifecycle_hook_severity,
         )
     if config.has(GateLayer.G6):
         # Egress grounding sink (citation-provenance binding) -- the second sink
