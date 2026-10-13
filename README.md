@@ -135,6 +135,29 @@ which reproduce offline, are in [`REPRODUCING.md`](REPRODUCING.md).
 
 ---
 
+## Installing PALISADE into a host application
+
+The repository is a uv workspace with two distributions. A host depends on
+`palisade` alone — 444 KB, no attack corpus — while `siege` and its 205
+instances stay out of the deployment.
+
+```toml
+# the host's pyproject.toml
+dependencies = ["palisade==1.0.0"]
+
+[tool.uv.sources]
+palisade = { git = "https://github.com/ORNL/palisade-siege", tag = "v1.0.0", subdirectory = "." }
+```
+
+Pin a tag rather than a branch: the reported numbers are a release tag, and a
+gate stack that drifts underneath a deployment is a security change nobody
+reviewed.
+
+`uv sync` in *this* repository installs both members plus the analysis
+dependencies, which is what reproduction needs.
+
+---
+
 ## Using PALISADE as a sidecar
 
 PALISADE wraps an existing agentic framework rather than owning one. It is
@@ -183,13 +206,14 @@ contain.
 ## Safety and release tiering
 
 Public attack payloads are **detection-pattern triggers with placeholder hosts,
-not working exploits**, and all dual-use content is surrogate-only. A separate
-**Everything is public, the adaptive machinery included** — the trained attack
-policies, the transform libraries and the reward-ranked evasive pools. Gating
-them was considered and dropped: this paper argues that a defense evaluated
-only against fixed attacks measures nothing about its worst case, and that
-argument is not checkable against our own system with the attacks that move it
-held back.
+not working exploits**, and all dual-use content is surrogate-only.
+
+**Everything is public, the adaptive machinery included** — the PAIR/TAP
+optimizer drivers, the transform libraries and the reward-ranked strategy
+library. Gating them was considered and dropped: this paper argues that a
+defense evaluated only against fixed attacks measures nothing about its worst
+case, and that argument is not checkable against our own system with the attacks
+that move it held back.
 
 [`docs/palisade/RELEASE_SAFETY.md`](docs/palisade/RELEASE_SAFETY.md) states what
 the release contains, what is not redistributable, and how the payload claim
@@ -206,27 +230,3 @@ See [`CITATION.cff`](CITATION.cff). The archival DOI is minted at camera-ready;
 
 This software was authored by UT-Battelle, LLC under Contract No.
 DE-AC05-00OR22725 with the U.S. Department of Energy. See [`NOTICE`](NOTICE).
-# palisade_siege_agentic_security
-
----
-
-## Installing PALISADE into a host application
-
-The repository is a uv workspace with two distributions. A host depends on
-`palisade` alone — 444 KB, no attack corpus — while `siege` and its 205
-instances stay out of the deployment.
-
-```toml
-# the host's pyproject.toml
-dependencies = ["palisade==1.0.0"]
-
-[tool.uv.sources]
-palisade = { git = "https://github.com/ORNL/palisade-siege", tag = "v1.0.0", subdirectory = "." }
-```
-
-Pin a tag rather than a branch: the reported numbers are a release tag, and a
-gate stack that drifts underneath a deployment is a security change nobody
-reviewed.
-
-`uv sync` in *this* repository installs both members plus the analysis
-dependencies, which is what reproduction needs.
