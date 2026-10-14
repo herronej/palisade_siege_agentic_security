@@ -4,8 +4,8 @@
 Deployment Environments) is a privileged security-mediation sidecar for agentic
 scientific platforms. It interposes a gate at each boundary a deployment exposes
 and enforces an information-flow model in which every value carries four label
-axes — source, taint, sensitivity tier, dual-use marker — plus a provenance
-chain. The load-bearing admission decisions are **deterministic predicates over
+axes (source, taint, sensitivity tier, dual-use marker) and a provenance chain.
+The load-bearing admission decisions are **deterministic predicates over
 labels assigned outside the model**; the content-inspecting tiers are
 subordinate to them and can only add denials.
 
@@ -33,15 +33,15 @@ Evaluation for Agentic AI in Scientific Workflows*.
 **At a twelve-query budget the deployed configuration is not adaptively
 secure.** The two bounds locate why. Under the production bound the runtime
 reconstructs a label by matching argument content, and optimization recovers
-most of the capable set. Under the recorded-label bound — the sink reading the
-label the corpus author attached — no attack and no seed moves the residual.
-Every recovered win is a value that arrived at the sink with *no label to
-adjudicate*; none is a label the predicate read and admitted.
+most of the capable set. Under the recorded-label bound, where the sink reads
+the label the corpus author attached, the residual does not move under any
+attack or seed. Every recovered win is a value that arrived at the sink with
+*no label to adjudicate*; none is a label the predicate read and admitted.
 
 That gap is the **label-propagation residual**. PALISADE propagates by content
 match rather than through an interpreter that observes dataflow, so the closure
-is partial by construction. The trade is deployability against closure, and it
-is the paper's central limitation, not an incidental one.
+is partial by construction. The trade is deployability against closure. It is
+the paper's central limitation.
 
 The four instances surviving even the recorded-label bound are a genuine defect
 the evaluation surfaced in our own system: a privileged sink **fails open on an
@@ -205,8 +205,7 @@ above is verified rather than asserted.
 
 ## Citation
 
-See [`CITATION.cff`](CITATION.cff). The archival DOI is minted at camera-ready;
-**the state behind the reported numbers is a release tag, not a branch head.**
+See [`CITATION.cff`](CITATION.cff). The archival DOI is minted at camera-ready.
 
 ## Acknowledgment
 
