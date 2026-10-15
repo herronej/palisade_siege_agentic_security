@@ -1,51 +1,157 @@
 # PALISADE and SIEGE
 
-**PALISADE** (Provenance-Aware Labeling and Information-flow Security for Agentic
-Deployment Environments) is a privileged security-mediation sidecar for agentic
-scientific platforms. It interposes a gate at each boundary a deployment exposes
-and enforces an information-flow model in which every value carries four label
-axes (source, taint, sensitivity tier, dual-use marker) and a provenance chain.
-The load-bearing admission decisions are **deterministic predicates over
-labels assigned outside the model**; the content-inspecting tiers are
-subordinate to them and can only add denials.
+Security mediation and adversarial evaluation for AI agents at HPC facilities.
+
+This repository is the artifact for **Security Mediation and Adversarial
+Evaluation for Agentic AI at HPC Facilities**, by Emily Herron, Jesse Hines,
+Vanessa Lama, Junqi Yin, Jack Hutchins, Amir Sadovnik and Feiyi Wang (Oak Ridge
+National Laboratory). To appear in the SC26 Workshops proceedings, 1st
+International Workshop on Agentic AI for HPC (AgenticAI4HPC'26), Chicago,
+November 2026. See [Citation](#citation).
+
+---
+
+## Overview
+
+AI agents at DOE user facilities retrieve documents, run code and submit batch
+jobs. Two failures there have the same shape. An injected instruction that
+steers a privileged action and an unsupported citation that reaches the
+scientist are both a value arriving at a consequential action from an origin
+that action should not accept.
+
+**PALISADE** (Provenance-Aware Labeling and Information-flow Security for
+Agentic Deployment Environments) is a sidecar that sits between an agent and
+those actions. It labels every value by where it came from, outside the model's
+reach, and admits a value at a privileged action only if its label permits.
+Detectors that inspect content run alongside, but they can only add denials.
+The decision to admit is a deterministic check over labels.
 
 **SIEGE** (Scientific-agent Infrastructure Exploitation and Guardrail
-Evaluation) is its companion benchmark: 205 attack instances across 42 classes
-against a 181-task benign control, with a static mode and an adaptive mode. It
-scores an evaded inspection tier (**soft win**) separately from a value reaching
-a privileged sink with its label stripped (**hard win**). Only the latter
-compromises the information-flow model.
+Evaluation) is the benchmark for it: 205 attack instances in 42 classes, a
+181-task benign control, and static and adaptive modes. It treats HPC job
+submission as an enforced, measured security boundary.
 
-This repository is the artifact for *Security Mediation and Adversarial
-Evaluation for Agentic AI in Scientific Workflows*.
+---
 
-## What the evaluation found
+## Key terms
 
-| | |
+| Term | Meaning |
 |---|---|
-| Hard wins at the recommended deterministic tier, authored payloads | **13 of 32** sink-capable instances |
-| Hard wins at the strongest configuration we run (`+all`) | **4 of 32** |
-| Hard wins under PAIR / TAP, 12-query budget, five seeds | **28.0–31.0 of 32** against *every* configuration |
-| Hard wins under the recorded-label bound | **4 of 32**, invariant to attack and seed |
-| Benign controls blocked at the recommended posture | **3.3%**, for a 3.3 pp utility loss |
-| Deterministic fast-tier cost | **0.28 ms** per benign turn |
+| Sink | An action with a consequential effect: the file, shell and scheduler tools, and the answer returned to the scientist. |
+| Soft win | An attack action a gate admits, meaning it got past inspection. |
+| Hard win | An untrusted value admitted at a sink, or a forged citation reaching the answer. Only a hard win breaks the information-flow model. |
+| Sink-capable | An attack instance that can reach a sink at all. 32 of the 150 security instances are; hard-win counts below use this denominator. |
+| Production bound | Hard wins scored with labels as the runtime reconstructs them, by matching text. |
+| Recorded-label bound | Hard wins scored with the labels the corpus author attached, standing in for perfect label tracking. |
+| Credited admission | An adaptive-search win: a rewrite admitted at a sink while untrusted taint is live. It does not confirm the rewrite still carries the attack. |
 
-**At a twelve-query budget the deployed configuration is not adaptively
-secure.** The two bounds locate why. Under the production bound the runtime
-reconstructs a label by matching argument content, and optimization recovers
-most of the capable set. Under the recorded-label bound, where the sink reads
-the label the corpus author attached, the residual does not move under any
-attack or seed. Every recovered win is a value that arrived at the sink with
-*no label to adjudicate*; none is a label the predicate read and admitted.
+---
 
-That gap is the **label-propagation residual**. PALISADE propagates by content
-match rather than through an interpreter that observes dataflow, so the closure
-is partial by construction. The trade is deployability against closure. It is
-the paper's central limitation.
+## How PALISADE works
 
-The four instances surviving even the recorded-label bound are a genuine defect
-the evaluation surfaced in our own system: a privileged sink **fails open on an
-unlabelled value**. See `docs/palisade/README.md` for where that is measured.
+PALISADE places one gate at each boundary the deployment exposes.
+
+| Gate | Boundary | What it checks |
+|---|---|---|
+| G1 | Prompt | Attack signatures over de-obfuscated text; CUI and PII markers |
+| G2 | Tool | Tool allow-list, descriptor hash, JSON-Schema validation, sink predicate |
+| G3 | Retrieval | Corpus allow-list, sensitivity tier against session trust, query injection, manifest hash |
+| G4 | Code | High-risk constructs, sandbox path scoping, execution indicators, optional Semgrep |
+| G5 | Slurm submission | Twelve policy checks over the parsed script, including resource ceilings, lifecycle hooks, chained-job dependencies, and which source proposed each scheduler field |
+| G6 | Answer (egress) | Every cited identifier must appear in the turn's retrieval ledger |
+
+**Labels.** Every value carries four labels (source, taint, sensitivity tier,
+dual-use marker) and a provenance chain. Taint is assigned by origin, not
+content: every prompt, tool return and retrieved chunk is registered as
+untrusted, so rewriting a payload cannot change its taint. The model never
+writes a label.
+
+**Sink check.** A privileged sink admits an argument only if none of its taint
+comes from outside the trusted principals: the authenticated user and the
+system and operator channels.
+
+**The limit.** A sidecar on an unmodified agent loop cannot observe dataflow,
+so labels follow values by matching text. A sink argument inherits a label if
+it reuses an untrusted value verbatim or keeps a distinctive run of it (at
+least 12 characters containing a path, URL or shell metacharacter, or a
+spaceless letter-and-digit string), including under base64, hex or ROT13
+encoding. A paraphrase arrives unlabeled. The one exception is a scheduler
+field with a closed vocabulary (QoS, partition, account, reservation): G5 reads
+the parsed value and checks which source proposed it, so a paraphrase is still
+attributed.
+
+---
+
+## Results
+
+On authored attacks, the deterministic tier stops 19 of the 32 sink-capable
+instances at 0.28 ms per turn. Adaptive search recovers admission, but a hand
+audit finds that about half of the admitted rewrites no longer carry the
+attack, and every admission search added reached the sink without a label.
+**The deployed configuration is not adaptively secure, and the failure lies in
+label propagation, not in the sink check.**
+
+### Authored attacks (static corpus, seed 42)
+
+| Configuration | Hard wins, of 32 |
+|---|---|
+| Undefended | 32 |
+| `full` and the recommended posture (deterministic tier) | 13 |
+| `+all` (adds the model-backed tier and Semgrep) | 4 |
+| Recorded-label bound, deterministic tier | 4 |
+
+`+all` closes nine more instances but raises a benign turn from 0.28 ms to
+about 2.5 s, so the recommended posture is the deterministic tier: `full` with
+G6 set to block, the G1 weaponization signature disabled,
+`sticky_high_stakes` off, and lifecycle-hook denials routed at SEV2 (paper,
+Section V-G).
+
+### Adaptive attacks (PAIR and TAP, 12 queries, five seeds)
+
+| Measure | Result |
+|---|---|
+| Credited admissions, gpt-oss-120b proposer | means of 28.0 to 31.0 of 32 across PALISADE configurations |
+| Credited admissions, Mistral Small 4 proposer | 22.8 of 32 |
+| Admitted rewrites still carrying the attack (hand audit, four runs) | about 14 per run (56 of 119), against 13 unsearched |
+| Hard wins under the recorded-label bound | 4 of 32, unchanged by any attack or seed |
+
+### Cost
+
+| Measure | Result |
+|---|---|
+| Benign controls blocked, recommended posture | 3.3% (6 of 181), a 3.3 pp utility loss |
+| AgentDojo v1.2.1 benign tasks broken, deterministic proxy | 17% of those the undefended agent completes |
+| Fast-tier latency | 0.28 ms per benign turn |
+
+### What the results mean
+
+The two bounds separate the sink check from label propagation. Under the
+production bound, search finds paraphrases that reach the sink unlabeled. Under
+the recorded-label bound, where the sink reads the true label, no attack or
+seed moves the residual. The difference between them is the
+**label-propagation residual**.
+
+The four instances that survive even the recorded-label bound are all `xc_1`
+cross-boundary chains. No label reaches their sink under either bound, so the
+sink admits an unlabeled value: a fail-open the evaluation surfaced in our own
+system. The model-backed tier closes three of the four.
+
+---
+
+## Quickstart
+
+Requires Python 3.14.3 and [uv](https://docs.astral.sh/uv/). Everything below
+runs on one workstation with no facility allocation and no account.
+
+```bash
+uv sync                                          # install both packages
+uv run pytest                                    # 2000+ deterministic tests, no network
+uv run python -m tools.soft_hard_decomposition   # replay the corpus through the gate stack
+uv run python -m tools.corpus_datasheet          # regenerate the corpus datasheet
+```
+
+[`REPRODUCING.md`](REPRODUCING.md) covers every reported result, including
+which need a served model and which reproduce offline.
 
 ---
 
@@ -55,12 +161,12 @@ unlabelled value**. See `docs/palisade/README.md` for where that is measured.
 src/palisade/          the sidecar
   sidecar.py             hook wiring; master flag off => empty hook list
   config.py              every toggle; PALISADE_<FIELD> from the environment
-  host.py                the host-application contract (see below)
+  host.py                the host-application contract
   paths.py               repo anchors used by the analysis modules
   gates/                 G1 prompt · G2 tool · G3 retrieval · G4 code
                          G5 scheduler · G6 egress, plus the Slurm parser
   capabilities/          PydanticAI capability shims + label propagation
-  contracts/            the 11-contract domain library + bundled Semgrep rules
+  contracts/             the 11-contract domain library + bundled Semgrep rules
   trust.py incidents.py  sticky-floor trust scorer and incident playbook
   provenance.py          one chokepoint; every decision emitted as an event
 
@@ -71,7 +177,8 @@ siege/src/siege/       the benchmark  (separate distribution)
   redteam/               the adaptive adversary (PAIR/TAP drivers, optimizers)
   eval/                  the replay harness and per-gate runners
   scorer.py              soft-win / hard-win adjudication
-  ablation_matrix.py     the nine configurations of the cumulative ladder
+  ablation_matrix.py     the nine ablation configurations (six cumulative,
+                         three independent additions to full)
 
 tools/                 analysis modules; one per reported number
 docs/palisade/         generated reports + the result-to-module map
@@ -79,72 +186,36 @@ docker/slurm/          single-node slurmctld (Slurm 23.11.4) for the B5 sweeps
 palisade_contracts/    operator contract directory, loaded beside the built-ins
 ```
 
-`tools/` is deliberately not packaged into the wheel — the analysis modules run
-from a checkout as `python -m tools.<module>`, which is how the paper cites
-them.
-
----
-
-## Quickstart
-
-Requires Python 3.14.3 and [uv](https://docs.astral.sh/uv/). Everything below
-runs on one workstation with no facility allocation and no account.
-
-```bash
-uv sync
-```
-
-Run the test suite (2000+ tests, deterministic, no network):
-
-```bash
-uv run pytest
-```
-
-Replay the corpus through the unmodified gate stack:
-
-```bash
-uv run python -m tools.soft_hard_decomposition
-```
-
-Regenerate the corpus datasheet:
-
-```bash
-uv run python -m tools.corpus_datasheet
-```
-
-Full reproduction instructions, including which results need a served model and
-which reproduce offline, are in [`REPRODUCING.md`](REPRODUCING.md).
+`tools/` is not packaged into the wheel. Run its modules from a checkout as
+`python -m tools.<module>`, which is how the paper cites them.
 
 ---
 
 ## Installing PALISADE into a host application
 
-The repository is a uv workspace with two distributions. A host depends on
-`palisade` alone — 444 KB, no attack corpus — while `siege` and its 205
-instances stay out of the deployment.
+The repository is a uv workspace with two packages. A host depends on
+`palisade` alone (444 KB, no attack corpus); `siege` stays out of the
+deployment.
 
 ```toml
 # the host's pyproject.toml
 dependencies = ["palisade==1.0.0"]
 
 [tool.uv.sources]
-palisade = { git = "https://github.com/ORNL/palisade-siege", tag = "v1.0.0", subdirectory = "." }
+palisade = { git = "https://github.com/herronej/palisade_siege_agentic_security", tag = "v1.0.0", subdirectory = "." }
 ```
 
-Pin a tag rather than a branch: the reported numbers are a release tag, and a
-gate stack that drifts underneath a deployment is a security change nobody
-reviewed.
-
-`uv sync` in *this* repository installs both members plus the analysis
-dependencies, which is what reproduction needs.
+Pin a tag, not a branch. The reported numbers come from a release tag, and a
+gate stack that changes underneath a deployment is an unreviewed security
+change.
 
 ---
 
 ## Using PALISADE as a sidecar
 
-PALISADE wraps an existing agentic framework rather than owning one. It is
-strictly modular: **with the master flag off the hook list is empty and the
-agent is byte-identical to the unguarded baseline.**
+PALISADE wraps an existing agentic framework rather than replacing it. **With
+the master flag off, the hook list is empty and the agent is byte-identical to
+the unguarded baseline.**
 
 ```python
 from palisade.config import PalisadeSettings
@@ -155,57 +226,65 @@ sidecar = PalisadeSidecar(settings, my_project)   # your own project object
 agent = Agent(..., capabilities=sidecar.build_capabilities())
 ```
 
-`my_project` is **your** object, passed unconverted. `palisade.host.HostProject`
-is a `typing.Protocol` stating the minimum shape the sidecar reads — `id`,
-`name`, `knowledge_bases`, `tools` — so a host satisfies it structurally with
-no base class to inherit, no adapter, and no validation or copying at runtime.
-`HostProjectModel` is a concrete implementation for hosts that have no such
-object of their own.
+`my_project` is your own object, passed as is. The sidecar reads only `id`,
+`name`, `knowledge_bases` and `tools`, as stated by the `typing.Protocol`
+`palisade.host.HostProject`, so any object with those attributes works without
+a base class or adapter. Hosts without such an object can use the concrete
+`HostProjectModel`.
 
-Configure it from the environment as `PALISADE_<FIELD>` (see `.env.sample`), or
-mount `PalisadeSettings` as a nested field on your own settings object — the
-sidecar only ever reads the instance it is handed.
+Configure PALISADE through `PALISADE_<FIELD>` environment variables (see
+`.env.sample`), or nest `PalisadeSettings` in your own settings object.
 
 The reference deployment is VISTA, a FastMCP/PydanticAI platform whose
 retrieval, sandboxed execution, Slurm submission and citation egress exercise
-six of the eight boundaries the threat model names. The tests under
-`src/palisade/tests/host_integration/` exercise PALISADE inside that host and
-skip automatically without it; nothing the paper reports depends on them.
+six of the eight boundaries in the threat model. The tests under
+`src/palisade/tests/host_integration/` run PALISADE inside VISTA and skip when
+it is absent. No reported result depends on them.
 
 ---
 
-## Running SIEGE against a different defense
-
-The corpus is declarative — one file is one instance, one directory is one
-class — and the runner takes any gate stack exposing the same admission
-interface. SIEGE is meant to be run against defenses other than ours. See
-`siege/src/siege/README.md` for the admission interface and
-`docs/palisade/RELEASE_SAFETY.md` for what the public corpus does and does not
-contain.
-
----
-
-## Safety and release tiering
+## Safety and release
 
 Public attack payloads are **detection-pattern triggers with placeholder hosts,
-not working exploits**, and all dual-use content is surrogate-only.
+not working exploits**. All dual-use content is surrogate-only.
 
-**Everything is public, the adaptive machinery included** — the PAIR/TAP
-optimizer drivers, the transform libraries and the reward-ranked strategy
-library. Gating them was considered and dropped: this paper argues that a
-defense evaluated only against fixed attacks measures nothing about its worst
-case, and that argument is not checkable against our own system with the attacks
-that move it held back.
+**The adaptive machinery is public too:** the PAIR/TAP optimizer drivers, the
+transform libraries and the reward-ranked strategy library. The paper argues
+that a defense tested only against fixed attacks says nothing about its worst
+case, and readers cannot check that argument against our system if the attacks
+that move it are withheld. The reported PAIR and TAP runs start from each
+instance's authored payload, use no pre-ranked pool, and exclude the encode and
+round-trip transforms (paper, Appendix D-A).
 
-[`docs/palisade/RELEASE_SAFETY.md`](docs/palisade/RELEASE_SAFETY.md) states what
+[`docs/palisade/RELEASE_SAFETY.md`](docs/palisade/RELEASE_SAFETY.md) lists what
 the release contains, what is not redistributable, and how the payload claim
-above is verified rather than asserted.
+above is verified.
 
 ---
 
 ## Citation
 
-See [`CITATION.cff`](CITATION.cff). The archival DOI is minted at camera-ready.
+If you use PALISADE or SIEGE, please cite the paper:
+
+```bibtex
+@inproceedings{herron2026palisade,
+  author    = {Herron, Emily and Hines, Jesse and Lama, Vanessa and Yin, Junqi and
+               Hutchins, Jack and Sadovnik, Amir and Wang, Feiyi},
+  title     = {Security Mediation and Adversarial Evaluation for Agentic {AI}
+               at {HPC} Facilities},
+  booktitle = {Proceedings of the SC '26 Workshops of the International
+               Conference for High Performance Computing, Networking,
+               Storage and Analysis},
+  series    = {SC Workshops '26},
+  publisher = {IEEE},
+  address   = {Chicago, IL, USA},
+  year      = {2026},
+  note      = {1st International Workshop on Agentic AI for HPC
+               (AgenticAI4HPC'26). To appear}
+}
+```
+
+For the software itself, see [`CITATION.cff`](CITATION.cff).
 
 ## Acknowledgment
 
