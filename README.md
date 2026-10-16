@@ -58,13 +58,14 @@ PALISADE places one gate at each boundary the deployment exposes.
 | G3 | Retrieval | Corpus allow-list, sensitivity tier against session trust, query injection, manifest hash |
 | G4 | Code | High-risk constructs, sandbox path scoping, execution indicators, optional Semgrep |
 | G5 | Slurm submission | Twelve policy checks over the parsed script, including resource ceilings, lifecycle hooks, chained-job dependencies, and which source proposed each scheduler field |
-| G6 | Answer (egress) | Every cited identifier must appear in the turn's retrieval ledger |
+| G6 | Answer (egress) | Every cited identifier must appear in the turn's retrieval ledger. Annotates a violating answer by default; blocks in the recommended posture |
 
 **Labels.** Every value carries four labels (source, taint, sensitivity tier,
 dual-use marker) and a provenance chain. Taint is assigned by origin, not
 content: every prompt, tool return and retrieved chunk is registered as
-untrusted, so rewriting a payload cannot change its taint. The model never
-writes a label.
+untrusted, so rewriting a payload cannot change its taint. The planning model
+never writes a label. Dual-use is the one label a model assigns, from the
+quarantined model's classification.
 
 **Sink check.** A privileged sink admits an argument only if none of its taint
 comes from outside the trusted principals: the authenticated user and the
@@ -106,20 +107,20 @@ G6 set to block, the G1 weaponization signature disabled,
 `sticky_high_stakes` off, and lifecycle-hook denials routed at SEV2 (paper,
 Section V-G).
 
-### Adaptive attacks (PAIR and TAP, 12 queries, five seeds)
+### Adaptive attacks (PAIR and TAP, budget 12 proposals, five seeds)
 
 | Measure | Result |
 |---|---|
 | Credited admissions, gpt-oss-120b proposer | means of 28.0 to 31.0 of 32 across PALISADE configurations |
-| Credited admissions, Mistral Small 4 proposer | 22.8 of 32 |
+| Credited admissions, Mistral Small 4 proposer | 22.8 of 32 for PAIR and TAP both, against the recommended posture |
 | Admitted rewrites still carrying the attack (hand audit, four runs) | about 14 per run (56 of 119), against 13 unsearched |
-| Hard wins under the recorded-label bound | 4 of 32, unchanged by any attack or seed |
+| Hard wins under the recorded-label bound | 4 of 32 for every attack and seed, by construction (an implementation check, paper Section V-E) |
 
 ### Cost
 
 | Measure | Result |
 |---|---|
-| Benign controls blocked, recommended posture | 3.3% (6 of 181), a 3.3 pp utility loss |
+| Benign controls blocked, recommended posture | 3.3% (6 of 181) |
 | AgentDojo v1.2.1 benign tasks broken, deterministic proxy | 17% of those the undefended agent completes |
 | Fast-tier latency | 0.28 ms per benign turn |
 
@@ -127,14 +128,17 @@ Section V-G).
 
 The two bounds separate the sink check from label propagation. Under the
 production bound, search finds paraphrases that reach the sink unlabeled. Under
-the recorded-label bound, where the sink reads the true label, no attack or
-seed moves the residual. The difference between them is the
-**label-propagation residual**.
+the recorded-label bound the sink reads the label the corpus author attached,
+and the residual stays at 4 of 32 by construction: that run checks that no
+rewrite reaches the sink check through argument content. The difference
+between the two bounds is the label-propagation residual.
 
-The four instances that survive even the recorded-label bound are all `xc_1`
-cross-boundary chains. No label reaches their sink under either bound, so the
-sink admits an unlabeled value: a fail-open the evaluation surfaced in our own
-system. The model-backed tier closes three of the four.
+The four instances that survive the recorded-label bound are all `xc_1`
+cross-boundary chains, whose sink argument is authored fresh and shares no text
+with the poisoned read. No label reaches their sink under either bound, so the
+sink check never evaluates them. Closing them needs dataflow tracking or
+keeping untrusted values out of the planner's context (paper, Section VI-B).
+The model-backed tier closes three of the four.
 
 ---
 
@@ -149,6 +153,11 @@ uv run pytest                                    # 2000+ deterministic tests, no
 uv run python -m tools.soft_hard_decomposition   # replay the corpus through the gate stack
 uv run python -m tools.corpus_datasheet          # regenerate the corpus datasheet
 ```
+
+The sandbox-mediation probe and the B5 sweeps need a local Docker or Podman
+daemon. The `+semgrep` column needs the Semgrep binary; without it the
+static-analysis step does not run and the column returns `full`'s 13 of 32
+rather than 12.
 
 [`REPRODUCING.md`](REPRODUCING.md) covers every reported result, including
 which need a served model and which reproduce offline.
@@ -213,11 +222,12 @@ change.
 
 ## Using PALISADE as a sidecar
 
-PALISADE wraps an existing agentic framework rather than replacing it. **With
+PALISADE wraps an existing agentic framework rather than replacing it. With
 the master flag off, the hook list is empty and the agent is byte-identical to
-the unguarded baseline.**
+the unguarded baseline.
 
 ```python
+from pydantic_ai import Agent
 from palisade.config import PalisadeSettings
 from palisade.sidecar import PalisadeSidecar
 
@@ -235,11 +245,12 @@ a base class or adapter. Hosts without such an object can use the concrete
 Configure PALISADE through `PALISADE_<FIELD>` environment variables (see
 `.env.sample`), or nest `PalisadeSettings` in your own settings object.
 
-The reference deployment is VISTA, a FastMCP/PydanticAI platform whose
-retrieval, sandboxed execution, Slurm submission and citation egress exercise
-six of the eight boundaries in the threat model. The tests under
-`src/palisade/tests/host_integration/` run PALISADE inside VISTA and skip when
-it is absent. No reported result depends on them.
+The reference deployment is VISTA, a FastMCP/PydanticAI platform whose prompt
+interface, tool layer, retrieval, sandboxed execution, Slurm submission and
+citation egress exercise six of the eight boundaries in the threat model (B0
+through B5). The tests under `src/palisade/tests/host_integration/` run
+PALISADE inside VISTA and skip when it is absent. No reported result depends on
+them.
 
 ---
 
@@ -248,7 +259,7 @@ it is absent. No reported result depends on them.
 Public attack payloads are **detection-pattern triggers with placeholder hosts,
 not working exploits**. All dual-use content is surrogate-only.
 
-**The adaptive machinery is public too:** the PAIR/TAP optimizer drivers, the
+The adaptive machinery is public too: the PAIR/TAP optimizer drivers, the
 transform libraries and the reward-ranked strategy library. The paper argues
 that a defense tested only against fixed attacks says nothing about its worst
 case, and readers cannot check that argument against our system if the attacks
